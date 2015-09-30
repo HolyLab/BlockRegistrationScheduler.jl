@@ -1,12 +1,15 @@
 ### Dummy algorithms to test features of `driver`
 module WorkerDummy
 
+using RegisterWorkerShell
+import RegisterWorkerShell: worker
+
 export Alg1, Alg2, Alg3, monitor, worker, workerpid
 
 # Dispatch on the algorithm used to perform registration
 # Each algorithm has a container it uses for storage and communication
 # with the driver process
-abstract Alg
+abstract Alg <: AbstractWorker
 
 type Alg1{A<:AbstractArray} <: Alg
     fixed::A

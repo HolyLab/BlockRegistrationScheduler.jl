@@ -1,4 +1,8 @@
-using Images, JLD, HDF5, Formatting
+module RegisterDriver
+
+using Images, JLD, HDF5, Formatting, RegisterWorkerShell
+
+export driver
 
 """
 `driver(outfile, info, img, mon)` performs registration of the
@@ -94,3 +98,5 @@ function driver(outfile, info::Vector, img, mon::Vector)
 end
 
 driver(outfile, info, img, mon) = driver(outfile, [info], img, [mon])
+
+end # module
