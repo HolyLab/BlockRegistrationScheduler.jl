@@ -1,8 +1,6 @@
-using Images, AffineTransforms, TestImages, RegisterDriver, RegisterWorkerRigid
+using Images, AffineTransforms, TestImages, FixedSizeArrays
+using RegisterDriver, RegisterWorkerRigid
 using Base.Test
-
-# workdir = tempname()
-# mkdir(workdir)
 
 fixed = testimage("cameraman")
 tfm = tformrotate(pi/12)

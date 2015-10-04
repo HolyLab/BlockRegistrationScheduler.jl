@@ -1,4 +1,5 @@
 using BlockRegistrationScheduler
 
 include("driver.jl")
-include("workers.jl")
+include("rigid.jl")
+include("apertured.jl")

@@ -39,8 +39,9 @@ which will save `extra` only if `:extra` is a key in `mon`.
 function driver(outfile::AbstractString, algorithm::Vector, img, mon::Vector)
     length(algorithm) == length(mon) || error("Number of monitors must equal number of workers")
     # Perform any needed worker initialization
-    for alg in algorithm
-        init!(alg)
+    @sync for alg in algorithm
+        p = workerpid(alg)
+        @async @spawnat p init!(alg)
     end
     try
         n = nimages(img)
