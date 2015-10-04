@@ -2,3 +2,6 @@ Images
 JLD
 HDF5
 Formatting
+AffineTransforms
+Interpolations
+Reexport

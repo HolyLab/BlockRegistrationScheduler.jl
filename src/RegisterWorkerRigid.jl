@@ -1,6 +1,6 @@
 module RegisterWorkerRigid
 
-using Images, AffineTransforms, Interpolations, FastAnonymous, Reexport
+using Images, AffineTransforms, Interpolations, Reexport
 using BlockRegistration, RegisterCore, RegisterMismatch, RegisterOptimize
 @reexport using RegisterWorkerShell
 
