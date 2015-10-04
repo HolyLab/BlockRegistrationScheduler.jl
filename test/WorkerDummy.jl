@@ -1,10 +1,11 @@
 ### Dummy algorithms to test features of `driver`
 module WorkerDummy
 
-using RegisterWorkerShell
+using Reexport
+@reexport using RegisterWorkerShell
 import RegisterWorkerShell: worker
 
-export Alg1, Alg2, Alg3, monitor, worker, workerpid
+export Alg1, Alg2, Alg3
 
 # Dispatch on the algorithm used to perform registration
 # Each algorithm has a container it uses for storage and communication
@@ -39,21 +40,21 @@ function Alg3(s::ASCIIString; pid=1)
 end
 
 # Here are the "registration algorithms"
-function worker(info::Alg1, moving, tindex, mon)
-    info.λ = tindex
-    monitor!(mon, info)   # just dump output
+function worker(algorithm::Alg1, moving, tindex, mon)
+    algorithm.λ = tindex
+    monitor!(mon, algorithm)   # just dump output
 end
 
-function worker(info::Alg2, moving, tindex, mon)
+function worker(algorithm::Alg2, moving, tindex, mon)
     # Do stuff to set tform
     tform = linspace(1,12,12)+tindex
     monitor!(mon, :tform, tform)
     # Do more computations...
-    monitor!(mon, :u0, zeros(size(info.u0))-tindex)
+    monitor!(mon, :u0, zeros(size(algorithm.u0))-tindex)
 end
 
-function worker(info::Alg3, moving, tindex, mon)
-    monitor!(mon, info)
+function worker(algorithm::Alg3, moving, tindex, mon)
+    monitor!(mon, algorithm)
     if haskey(mon, :extra)
         mon[:extra] = "world"
     end
