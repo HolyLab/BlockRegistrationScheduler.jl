@@ -1,8 +1,9 @@
 module RegisterWorkerApertures
 
 using Images, AffineTransforms, Interpolations
-using BlockRegistration, RegisterCore, RegisterDeformation, RegisterFit, RegisterPenalty, RegisterOptimize, RegisterWorkerShell
+using BlockRegistration, RegisterCore, RegisterDeformation, RegisterFit, RegisterPenalty, RegisterOptimize
 # Note: RegisterMismatch/RegisterMismatchCuda is selected below
+using BlockRegistrationScheduler, RegisterWorkerShell
 
 import RegisterWorkerShell: worker, init!, close!
 

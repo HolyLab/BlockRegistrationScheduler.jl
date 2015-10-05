@@ -6,7 +6,14 @@ julia:
   - 0.4
 notifications:
   email: false
+# For building Ipopt, needed for BlockRegistration
+addons:
+  apt:
+    packages:
+      - build-essential
+      - gfortran
+      - pkg-config
 script:
   - if [[ -a .git/shallow ]]; then git fetch --unshallow; fi
-  - julia -e 'Pkg.clone(pwd()); Pkg.checkout("JLD")'
-  - julia -e 'Pkg.build("BlockRegistrationScheduler"); Pkg.test("BlockRegistrationScheduler")'
+  - julia -e 'Pkg.clone(pwd()); include(Pkg.dir("BlockRegistrationScheduler","build","build.jl"))'
+  - julia -e 'Pkg.test("BlockRegistrationScheduler")'

@@ -1,8 +1,7 @@
 ### Dummy algorithms to test features of `driver`
 module WorkerDummy
 
-using Reexport
-@reexport using RegisterWorkerShell
+using RegisterWorkerShell
 import RegisterWorkerShell: worker
 
 export Alg1, Alg2, Alg3

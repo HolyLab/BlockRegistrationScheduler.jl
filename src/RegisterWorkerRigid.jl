@@ -1,8 +1,8 @@
 module RegisterWorkerRigid
 
-using Images, AffineTransforms, Interpolations, Reexport
+using Images, AffineTransforms, Interpolations
 using BlockRegistration, RegisterCore, RegisterMismatch, RegisterOptimize
-@reexport using RegisterWorkerShell
+using BlockRegistrationScheduler, RegisterWorkerShell
 
 import RegisterWorkerShell: worker
 

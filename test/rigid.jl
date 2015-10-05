@@ -1,5 +1,5 @@
-using Images, AffineTransforms, TestImages, FixedSizeArrays
-using RegisterDriver, RegisterWorkerRigid
+using Images, AffineTransforms, TestImages
+using BlockRegistrationScheduler, RegisterDriver, RegisterWorkerShell, RegisterWorkerRigid
 using Base.Test
 
 fixed = testimage("cameraman")
