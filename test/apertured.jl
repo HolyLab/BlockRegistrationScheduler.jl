@@ -20,7 +20,7 @@ using Base.Test
 fixed = testimage("cameraman")
 gridsize = (5,5)
 shift_amplitude = 5
-u_dfm = randn(2, gridsize..., 4)
+u_dfm = shift_amplitude*randn(2, gridsize..., 4)
 img = copyproperties(fixed, SharedArray(Float64, (size(fixed)..., 4), pids = union(myid(), aperturedprocs)))
 img["timedim"] = 3
 knots = map(d->linspace(1,size(fixed,d),gridsize[d]), (1,2))

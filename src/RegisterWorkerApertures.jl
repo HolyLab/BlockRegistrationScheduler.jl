@@ -14,9 +14,12 @@ type Apertures{A<:AbstractArray,T,K,N} <: AbstractWorker
     fixed::A
     knots::NTuple{N,K}
     maxshift::NTuple{N,Int}
-    affinepenalty::AffinePenalty{T}
+    affinepenalty::AffinePenalty{T,N}
+    λrange::Tuple{T,T}
     thresh::T
     preprocess
+    normalization::Symbol
+    correctbias::Bool
     workerpid::Int
     dev::Int
     CUDArt_module
@@ -43,12 +46,16 @@ function close!(algorithm::Apertures)
     nothing
 end
 
-function Apertures{K,N}(fixed, knots::NTuple{N,K}, maxshift, λ, preprocess=identity; thresh_fac=(0.5)^ndims(fixed), thresh=nothing, pid=1, dev=-1)
+function Apertures{K,N}(fixed, knots::NTuple{N,K}, maxshift, λrange, preprocess=identity; normalization=:pixels, thresh_fac=(0.5)^ndims(fixed), thresh=nothing, correctbias::Bool=true, pid=1, dev=-1)
+    gridsize = map(length, knots)
     nimages(fixed) == 1 || error("Register to a single image")
-    cthresh = thresh == nothing ? thresh_fac*sumabs2(fixed) : thresh
-    T = eltype(fixed) <: AbstractFloat ? eltype(fixed) : Float64
+    if thresh == nothing
+        thresh = (thresh_fac/prod(gridsize)) * (normalization==:pixels ? length(fixed) : sumabs2(fixed))
+    end
+    # T = eltype(fixed) <: AbstractFloat ? eltype(fixed) : Float32
+    T = Float64   # Ipopt requires Float64
     cumodule = dev == -1 ? nothing : CuModule
-    Apertures{typeof(fixed),T,K,N}(fixed, knots, maxshift, AffinePenalty(knots, λ), convert(T, cthresh), preprocess, pid, dev, cumodule)
+    Apertures{typeof(fixed),T,K,N}(fixed, knots, maxshift, AffinePenalty{T,N}(knots, λrange[1]), (T(λrange[1]),T(λrange[end])), T(thresh), preprocess, normalization, correctbias, pid, dev, cumodule)
 end
 
 function worker(algorithm::Apertures, img, tindex, mon)
@@ -58,27 +65,32 @@ function worker(algorithm::Apertures, img, tindex, mon)
     if use_cuda
         device(algorithm.dev)
     end
-    mms = mismatch_apertures(algorithm.fixed, moving, map(length, algorithm.knots), algorithm.maxshift)
-    correctbias!(mms)
+    mms = mismatch_apertures(algorithm.fixed, moving, map(length, algorithm.knots), algorithm.maxshift; normalization=algorithm.normalization)
+    # displaymismatch(mms, thresh=10)
+    if algorithm.correctbias
+        correctbias!(mms)
+    end
     E0 = zeros(size(mms))
     cs = Array(Any, size(mms))
     Qs = Array(Any, size(mms))
+    thresh = algorithm.thresh
     for i = 1:length(mms)
-        E0[i], cs[i], Qs[i] = qfit(mms[i], 5000)
+        E0[i], cs[i], Qs[i] = qfit(mms[i], thresh)
     end
-    u0 = initial_deformation(algorithm.affinepenalty, cs, Qs)
-    if haskey(mon, :u0)
-        monitor!(mon, :u0, u0)
-    end
-    ϕ = GridDeformation(u0, (algorithm.knots...))
     mmis = interpolate_mm!(mms)
-    ϕ, mismatch = optimize!(ϕ, identity, algorithm.affinepenalty, mmis)
+    ϕ, mismatch, λ, dp, quality = RegisterOptimize.auto_λ(cs, Qs, algorithm.knots, algorithm.affinepenalty, mmis, algorithm.λrange...)
+    monitor!(mon, :mismatch, mismatch)
+    monitor!(mon, :λ, λ)
+    monitor!(mon, :datapenalty, dp)
+    monitor!(mon, :sigmoid_quality, quality)
     monitor!(mon, :u, ϕ.u)
-    if haskey(mon, :warped0)
-        monitor!(mon, :warped0, warp(moving0, ϕ))
-    end
     if haskey(mon, :warped)
-        monitor!(mon, :warped, warp(moving, ϕ))
+        warped = warp(moving, ϕ)
+        monitor!(mon, :warped, warped)
+    end
+    if haskey(mon, :warped0)
+        warped = warp(moving0, ϕ)
+        monitor!(mon, :warped, warped)
     end
     nothing
 end
