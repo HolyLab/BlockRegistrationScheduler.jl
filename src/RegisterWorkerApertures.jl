@@ -22,15 +22,12 @@ type Apertures{A<:AbstractArray,T,K,N} <: AbstractWorker
     correctbias::Bool
     workerpid::Int
     dev::Int
-    CUDArt_module
 end
 
 function init!(algorithm::Apertures)
     if algorithm.dev >= 0
-        @eval using RegisterMismatchCuda
-        modules = [algorithm.CUDArt_module]
-        CUDArt.init!(modules, [algorithm.dev])
-        algorithm.CUDArt_module = modules[1]
+        @eval using CUDArt, RegisterMismatchCuda
+        CUDArt.init(algorithm.dev)
         RegisterMismatchCuda.init([algorithm.dev])
     else
         @eval using RegisterMismatch
@@ -40,8 +37,8 @@ end
 
 function close!(algorithm::Apertures)
     if algorithm.dev >= 0
-        CUDArt.close!([algorithm.CUDArt_module], [algorithm.dev])
         RegisterMismatchCuda.close()
+        CUDArt.close(algorithm.dev)
     end
     nothing
 end
@@ -54,8 +51,7 @@ function Apertures{K,N}(fixed, knots::NTuple{N,K}, maxshift, λrange, preprocess
     end
     # T = eltype(fixed) <: AbstractFloat ? eltype(fixed) : Float32
     T = Float64   # Ipopt requires Float64
-    cumodule = dev == -1 ? nothing : CuModule
-    Apertures{typeof(fixed),T,K,N}(fixed, knots, maxshift, AffinePenalty{T,N}(knots, λrange[1]), (T(λrange[1]),T(λrange[end])), T(thresh), preprocess, normalization, correctbias, pid, dev, cumodule)
+    Apertures{typeof(fixed),T,K,N}(fixed, knots, maxshift, AffinePenalty{T,N}(knots, λrange[1]), (T(λrange[1]),T(λrange[end])), T(thresh), preprocess, normalization, correctbias, pid, dev)
 end
 
 function worker(algorithm::Apertures, img, tindex, mon)
