@@ -40,7 +40,7 @@ function worker(algorithm::Rigid, img, tindex, mon)
     moving = timedim(img) == 0 ? img : img["t", tindex]
     if algorithm.pat
         tfms = pat_rotation(algorithm.fixedpa, moving, algorithm.SD)
-        mov_etp = extrapolate(interpolate(moving, BSpline{Quadratic{Flat}}, OnCell), NaN)
+        mov_etp = extrapolate(interpolate(moving, BSpline(Quadratic(Flat())), OnCell()), NaN)
         penalty = tform -> (mm = mismatch0(algorithm.fixed, transform(mov_etp, tform)); ratio(mm, algorithm.thresh, convert(eltype(mm), Inf)))
         mm = map(penalty, tfms)
         tfm = tfms[indmin(mm)]
