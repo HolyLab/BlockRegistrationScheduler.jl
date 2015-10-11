@@ -15,7 +15,7 @@ type Apertures{A<:AbstractArray,T,K,N} <: AbstractWorker
     knots::NTuple{N,K}
     maxshift::NTuple{N,Int}
     affinepenalty::AffinePenalty{T,N}
-    λrange::Tuple{T,T}
+    λrange::Union{T,Tuple{T,T}}
     thresh::T
     preprocess
     normalization::Symbol
@@ -64,17 +64,20 @@ end
 function Apertures{K,N}(fixed, knots::NTuple{N,K}, maxshift, λrange, preprocess=identity; normalization=:pixels, thresh_fac=(0.5)^ndims(fixed), thresh=nothing, correctbias::Bool=true, pid=1, dev=-1)
     gridsize = map(length, knots)
     nimages(fixed) == 1 || error("Register to a single image")
+    isa(λrange, Number) || isa(λrange, NTuple{2}) || error("λrange must be a number or 2-tuple")
     if thresh == nothing
         thresh = (thresh_fac/prod(gridsize)) * (normalization==:pixels ? length(fixed) : sumabs2(fixed))
     end
     # T = eltype(fixed) <: AbstractFloat ? eltype(fixed) : Float32
     T = Float64   # Ipopt requires Float64
-    Apertures{typeof(fixed),T,K,N}(fixed, knots, maxshift, AffinePenalty{T,N}(knots, λrange[1]), (T(λrange[1]),T(λrange[end])), T(thresh), preprocess, normalization, correctbias, pid, dev)
+    λrange = isa(λrange, Number) ? T(λrange) : (T(first(λrange)), T(last(λrange)))
+    Apertures{typeof(fixed),T,K,N}(fixed, knots, maxshift, AffinePenalty{T,N}(knots, first(λrange)), λrange, T(thresh), preprocess, normalization, correctbias, pid, dev, Dict{Symbol,Any}())
 end
 
 function worker(algorithm::Apertures, img, tindex, mon)
     moving0 = timedim(img) == 0 ? img : img["t", tindex]
     moving = algorithm.preprocess(moving0)
+    gridsize = map(length, algorithm.knots)
     use_cuda = algorithm.dev >= 0
     if use_cuda
         device(algorithm.dev)
