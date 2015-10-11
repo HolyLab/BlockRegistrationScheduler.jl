@@ -22,21 +22,39 @@ type Apertures{A<:AbstractArray,T,K,N} <: AbstractWorker
     correctbias::Bool
     workerpid::Int
     dev::Int
+    cuda_objects::Dict{Symbol,Any}
 end
 
 function init!(algorithm::Apertures)
     if algorithm.dev >= 0
-        @eval using CUDArt, RegisterMismatchCuda
-        CUDArt.init(algorithm.dev)
-        RegisterMismatchCuda.init([algorithm.dev])
+        eval(:(using CUDArt, RegisterMismatchCuda))
+        cuda_init(algorithm)
     else
-        @eval using RegisterMismatch
+        eval(:(using RegisterMismatch))
     end
-    nothing
+    algorithm
+end
+
+function cuda_init(algorithm)
+    CUDArt.init(algorithm.dev)
+    RegisterMismatchCuda.init([algorithm.dev])
+    # Allocate the CUDA objects once at the beginning. Even
+    # though all temporary arrays appear to be freed, repeated
+    # allocation results in "out of memory" errors. (CUDA bug?)
+    device(algorithm.dev)
+    d_fixed  = CudaPitchedArray(convert(Array{Float32}, sdata(data(algorithm.fixed))))
+    algorithm.cuda_objects[:d_fixed] = d_fixed
+    algorithm.cuda_objects[:d_moving] = similar(d_fixed)
+    gridsize = map(length, algorithm.knots)
+    aperture_width = default_aperture_width(algorithm.fixed, gridsize)
+    algorithm.cuda_objects[:cms] = CMStorage(Float32, aperture_width, algorithm.maxshift)
 end
 
 function close!(algorithm::Apertures)
     if algorithm.dev >= 0
+        for (k,v) in algorithm.cuda_objects
+            free(v)
+        end
         RegisterMismatchCuda.close()
         CUDArt.close(algorithm.dev)
     end
@@ -60,8 +78,17 @@ function worker(algorithm::Apertures, img, tindex, mon)
     use_cuda = algorithm.dev >= 0
     if use_cuda
         device(algorithm.dev)
+        d_fixed  = algorithm.cuda_objects[:d_fixed]
+        d_moving = algorithm.cuda_objects[:d_moving]
+        cms      = algorithm.cuda_objects[:cms]
+        copy!(d_moving, moving)
+        cs = coords_spatial(img)
+        aperture_centers = aperture_grid(size(img)[cs], gridsize)
+        mms = allocate_mmarrays(eltype(cms), gridsize, algorithm.maxshift)
+        mismatch_apertures!(mms, d_fixed, d_moving, aperture_centers, cms; normalization=algorithm.normalization)
+    else
+        mms = mismatch_apertures(algorithm.fixed, moving, gridsize, algorithm.maxshift; normalization=algorithm.normalization)
     end
-    mms = mismatch_apertures(algorithm.fixed, moving, map(length, algorithm.knots), algorithm.maxshift; normalization=algorithm.normalization)
     # displaymismatch(mms, thresh=10)
     if algorithm.correctbias
         correctbias!(mms)
@@ -71,14 +98,19 @@ function worker(algorithm::Apertures, img, tindex, mon)
     Qs = Array(Any, size(mms))
     thresh = algorithm.thresh
     for i = 1:length(mms)
-        E0[i], cs[i], Qs[i] = qfit(mms[i], thresh)
+        E0[i], cs[i], Qs[i] = qfit(mms[i], thresh; opt=false)
     end
     mmis = interpolate_mm!(mms)
-    ϕ, mismatch, λ, dp, quality = RegisterOptimize.auto_λ(cs, Qs, algorithm.knots, algorithm.affinepenalty, mmis, algorithm.λrange...)
+    λrange = algorithm.λrange
+    if isa(λrange, Number)
+        ϕ, mismatch = RegisterOptimize.fixed_λ(cs, Qs, algorithm.knots, algorithm.affinepenalty, mmis)
+    else
+        ϕ, mismatch, λ, dp, quality = RegisterOptimize.auto_λ(cs, Qs, algorithm.knots, algorithm.affinepenalty, mmis, λrange...)
+        monitor!(mon, :λ, λ)
+        monitor!(mon, :datapenalty, dp)
+        monitor!(mon, :sigmoid_quality, quality)
+    end
     monitor!(mon, :mismatch, mismatch)
-    monitor!(mon, :λ, λ)
-    monitor!(mon, :datapenalty, dp)
-    monitor!(mon, :sigmoid_quality, quality)
     monitor!(mon, :u, ϕ.u)
     if haskey(mon, :warped)
         warped = warp(moving, ϕ)
