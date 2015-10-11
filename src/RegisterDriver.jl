@@ -1,6 +1,6 @@
 module RegisterDriver
 
-using Images, JLD, HDF5, Formatting, RegisterWorkerShell
+using Images, JLD, HDF5, FixedSizeArrays, Formatting, RegisterWorkerShell
 
 export driver
 
@@ -37,11 +37,20 @@ worker has been written to look for such settings:
 which will save `extra` only if `:extra` is a key in `mon`.
 """
 function driver(outfile::AbstractString, algorithm::Vector, img, mon::Vector)
-    length(algorithm) == length(mon) || error("Number of monitors must equal number of workers")
+    nworkers = length(algorithm)
+    length(mon) == nworkers || error("Number of monitors must equal number of workers")
+    # Push the algorithm objects to the worker processes. This elminates
+    # per-iteration serialization penalties, and ensures that any
+    # initalization state is retained.
+    rralgorithm = [put!(RemoteRef(workerpid(alg)), alg) for alg in algorithm]
     # Perform any needed worker initialization
-    @sync for alg in algorithm
-        p = workerpid(alg)
-        @async @spawnat p init!(alg)
+    rrs = Array(RemoteRef, nworkers)
+    for i = 1:nworkers
+        p = workerpid(algorithm[i])
+        rrs[i] = @spawnat p init!(fetch(rralgorithm[i]))
+    end
+    for rr in enumerate(rrs)
+        fetch(rr)  # collect any errors
     end
     try
         n = nimages(img)
@@ -80,13 +89,15 @@ function driver(outfile::AbstractString, algorithm::Vector, img, mon::Vector)
             end
             # Run the jobs
             nextidx = 0
-            getnextidx() = (nextidx += 1)
+            getnextidx() = nextidx += 1 # (println("nextidx = ", nextidx); nextidx += 1)
             writing_mutex = RemoteRef()
             @sync begin
-                for (i,alg) in enumerate(algorithm)
+                for i = 1:nworkers
+                    alg = algorithm[i]
                     @async begin
                         while (idx = getnextidx()) <= n
-                            remotecall_fetch(workerpid(alg), worker, alg, img, idx, mon[i])
+                            remotecall(workerpid(alg), println, "Worker ", workerpid(alg), " is working on ", idx)
+                            mon[i] = remotecall_fetch(workerpid(alg), worker, rralgorithm[i], img, idx, mon[i])
                             # Save the results
                             put!(writing_mutex, true)  # grab the lock
                             try
@@ -117,8 +128,12 @@ function driver(outfile::AbstractString, algorithm::Vector, img, mon::Vector)
         end
     finally
         # Perform any needed worker cleanup
-        for alg in algorithm
-            close!(alg)
+        for i = 1:nworkers
+            p = workerpid(algorithm[i])
+            rrs[i] = @spawnat p close!(fetch(rralgorithm[i]))
+        end
+        for rr in enumerate(rrs)
+            fetch(rr)  # collect any errors
         end
     end
 end
