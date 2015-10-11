@@ -31,9 +31,25 @@ end
 # Perform the registration
 fn = joinpath(tempdir(), "apertured.jld")
 maxshift = (3*shift_amplitude, 3*shift_amplitude)
-algorithms = [Apertures(fixed, knots, maxshift, 0.001; pid=p) for p in aperturedprocs]
-mons = [Dict{Symbol,Any}(:u => SharedArray(Vec{2,Float64}, gridsize, pids=[myid(),p]), :warped => SharedArray(Float64, size(fixed), pids=[1,p]), :mismatch => 0.0) for p in aperturedprocs]
+algorithms = Apertures[Apertures(fixed, knots, maxshift, 0.001; pid=p) for p in aperturedprocs]
+mons = monitor(algorithms,
+               (),
+               Dict(:u => Array(Vec{2,Float64}, gridsize),
+                    :warped => Array(Float64, size(fixed)),
+                    :mismatch => 0.0))
 driver(fn, algorithms, img, mons)
-# driver(algorithms[1], getindexim(img, "t", 1), mons[1])
 
 rmprocs(aperturedprocs)
+
+using JLD, RegisterCore, RegisterMismatch
+
+jldopen(fn) do f
+    mm = read(f["mismatch"])
+    @test all(mm .> 0)
+    warped = read(f["warped"])
+    for i = 1:nimages(img)
+        r0 = ratio(mismatch0(fixed, img["t", i]),0)
+        r1 = ratio(mismatch0(fixed, warped[:,:,i]), 0)
+        @test r0 > r1
+    end
+end

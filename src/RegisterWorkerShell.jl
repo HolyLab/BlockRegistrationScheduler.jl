@@ -1,6 +1,6 @@
 module RegisterWorkerShell
 
-export AbstractWorker, ArrayDecl, close!, init!, maybe_sharedarray, monitor, monitor!, worker, workerpid
+export AbstractWorker, AnyValue, ArrayDecl, close!, init!, maybe_sharedarray, monitor, monitor!, worker, workerpid
 
 """
 An `AbstractWorker` type performs registration on a single
@@ -40,44 +40,40 @@ RegisterWorkerShell
 `mon = monitor(algorithm, (:var1, :var2, ...))` turns on "monitoring"
 (reporting) for fields named `:var`, `:var2`, ... in `algorithm`. This
 causes results to be passed back to the driver algorithm, which will
-then save the values to disk.
+then save the values to disk. If `algorithm` is a Vector of algorithm
+objects, then one `mon` object is created for each.
 
-The worker should call `monitor!(mon, algorithm)` to copy the values
-into `mon`.
+`mon = monitor(algorithm, (:var1, :var2), Dict(:var3=>value3, ...))`
+monitors additional "internal" variables in the algorithm, as long as
+the worker algorithm has been set up to look for these entries in
+`mon`. You can safely choose 0 as the value for all `var`s; however,
+large arrays of bitstypes may benefit from being provided as a full
+instance of the proper type and size (see below about SharedArrays).
 
-One can monitor additional internal variables in the worker algorithm
-by manually adding elements to `mon`. For example,
+The worker algorithm should call `monitor!(mon, algorithm)` to copy
+the values into `mon`, and `monitor!(mon, :var3, var3)` for an
+internal variable `var3` that is not taken from `algorithm`. See
+`monitor!` for more detail.
 
-```
-    mon[:warped] = SharedArray(T, sz, pids=[1,2])
-```
-
-would set up a SharedArray for communicating back the warped image
-from worker-process 2 to the driver-process 1, assuming that you
-didn't already define a `warped` field of `algorithm`. A
-properly-prepared worker algorithm would store this result by calling
-`monitor!(mon, :warped, warped_image)` or, if its computation is
-expensive, could first check whether it's being requested:
-
-```
-    if haskey(mon, :warped)
-        monitor!(mon, :warped, warp(moving, ϕ)) # user wants this, so compute it
-    end
-```
-
-An important detail is that if `workerpid(algorithm) ≠ 1`, then any
+An important detail is that if `workerpid(algorithm) ≠ myid()`, then any
 requested `AbstractArray` fields in `algorithm` will be turned into
-`SharedArray`s for `mon`.
-
+`SharedArray`s for `mon`. This reduces the cost of communication
+between the worker and driver processes.
 """
-function monitor{N}(algorithm::AbstractWorker, fields::Union{NTuple{N,Symbol},Vector{Symbol}})
+function monitor{N}(algorithm::AbstractWorker, fields::Union{NTuple{N,Symbol},Vector{Symbol}}, morevars::Dict{Symbol,Any} = Dict{Symbol,Any}())
+    pid = workerpid(algorithm)
     mon = Dict{Symbol,Any}()
     for f in fields
         isdefined(algorithm, f) || continue
-        mon[f] = monitor_field(getfield(algorithm, f))
+        mon[f] = maybe_sharedarray(getfield(algorithm, f), pid)
+    end
+    for (k,v) in morevars
+        mon[k] = maybe_sharedarray(v, pid)
     end
     mon
 end
+
+monitor{W<:AbstractWorker}(algorithm::Vector{W}, fields, morevars::Dict{Symbol,Any} = Dict{Symbol,Any}()) = map(alg->monitor(alg, fields, morevars), algorithm)
 
 """
 `monitor!(mon, algorithm)` updates `mon` with the current values of
@@ -86,6 +82,10 @@ computations have finished.  See `monitor` for more information.
 
 `monitor!(mon, :parameter, algorithm)` copies just the value of
 `algorithm.parameter`, after first checking `haskey(mon, :parameter)`.
+
+One can check whether certain parameters are being request using
+`haskey(mon, :parameter)`. This might be wise if computation of
+`parameter` is non-essential and time consuming.
 """
 function monitor!(mon::Dict{Symbol,Any}, algorithm::AbstractWorker)
     for f in fieldnames(algorithm)
@@ -96,10 +96,15 @@ end
 
 function monitor!(mon, fn::Symbol, v::AbstractArray)
     if haskey(mon, fn)
-        copy!(mon[fn], v)
+        if isa(mon[fn], AbstractArray) && size(mon[fn]) == size(v)
+            copy!(mon[fn], v)
+        else
+            mon[fn] = v
+        end
     end
     mon
 end
+
 function monitor!(mon, fn::Symbol, v)
     if haskey(mon, fn)
         mon[fn] = v
@@ -132,21 +137,23 @@ outputs/variables to be monitored; see `monitor` for details.
 
 You must define this function for your `AbstractWorker` subtype.
 """
-worker(args...) = error("Worker modules must define `worker`")
+worker(algorithm::AbstractWorker, img, tindex, mon) = error("Worker modules must define `worker`")
+
+worker(rr::RemoteRef, img, tindex, mon) = worker(fetch(rr), img, tindex, mon)
 
 """
 `workerpid(algorithm)` extracts the `pid` associated with the worker
 that will be assigned tasks for `algorithm`.  All `AbstractWorker`
 subtypes should include a `workerpid` field, or overload this function
-to return 1.
+to return myid().
 """
 workerpid(w::AbstractWorker) = w.workerpid
 
 
 ## Utility functions
-function maybe_sharedarray(A::AbstractArray, pid::Int=1)
-    if pid != 1
-        S = SharedArray(eltype(A), size(A), pids=union(1, pid))
+function maybe_sharedarray(A::AbstractArray, pid::Int=myid())
+    if pid != myid() && isbits(eltype(A))
+        S = SharedArray(eltype(A), size(A), pids=union(myid(), pid))
         copy!(S, A)
     else
         S = A
@@ -154,18 +161,15 @@ function maybe_sharedarray(A::AbstractArray, pid::Int=1)
     S
 end
 
-function maybe_sharedarray{T}(::Type{T}, sz, pid::Int=1)
-    if pid != 1
-        S = SharedArray(T, sz, pids=union(1, pid))
+function maybe_sharedarray{T}(::Type{T}, sz::Dims, pid=myid())
+    if isbits(T)
+        S = SharedArray(T, sz, pids=union(myid(), pid))
     else
         S = Array(T, sz)
     end
     S
 end
 
-monitor_field(v::SharedArray) = SharedArray(eltype(v), size(v), pids=procs(v))
-monitor_field(v::AbstractArray) = similar(v)
-monitor_field{A}(d::ArrayDecl{A}) = A(d.arraysize)
-monitor_field(v) = v
+maybe_sharedarray(obj, pid::Int = myid()) = obj
 
 end

@@ -88,7 +88,7 @@ function worker(algorithm::Apertures, img, tindex, mon)
         warped = warp(moving0, ϕ)
         monitor!(mon, :warped, warped)
     end
-    nothing
+    mon
 end
 
 end # module

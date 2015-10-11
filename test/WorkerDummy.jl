@@ -27,7 +27,7 @@ type Alg2{A<:AbstractArray,V<:AbstractVector,M<:AbstractMatrix} <: Alg
     workerpid::Int
 end
 function Alg2{T}(fixed, ::Type{T}, sz; pid=1)
-    Alg2(maybe_sharedarray(fixed, pid), maybe_sharedarray(T, 12, pid), maybe_sharedarray(T, sz, pid), pid)
+    Alg2(maybe_sharedarray(fixed, pid), maybe_sharedarray(T, (12,), pid), maybe_sharedarray(T, sz, pid), pid)
 end
 
 type Alg3 <: Alg
@@ -57,6 +57,7 @@ function worker(algorithm::Alg3, moving, tindex, mon)
     if haskey(mon, :extra)
         mon[:extra] = "world"
     end
+    mon
 end
 
 end  # module
