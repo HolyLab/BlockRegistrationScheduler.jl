@@ -1,9 +1,18 @@
-newprocs = addprocs(2)
+driverprocs = addprocs(2)
+
+# Work around julia #3674
+using Images, JLD, Base.Test
+using BlockRegistrationScheduler, RegisterDriver, RegisterWorkerShell
+@sync for p in driverprocs
+    @spawnat p eval(quote
+        using Images, JLD, Base.Test
+        using BlockRegistrationScheduler, RegisterDriver, RegisterWorkerShell
+    end)
+end
 
 push!(LOAD_PATH, splitdir(@__FILE__)[1])
-using RegisterDriver, WorkerDummy, Images, JLD
+using WorkerDummy  # this is used uniquely here, so #3674 won't impact
 pop!(LOAD_PATH)
-using Base.Test
 
 workdir = tempname()
 mkdir(workdir)
@@ -46,17 +55,17 @@ end
 rm(fn)
 
 # Multi-process
-nw = length(newprocs)
+nw = length(driverprocs)
 alg = Array(Any, nw)
 mon = Array(Any, nw)
 for i = 1:nw
-    alg[i] = Alg2(rand(100,100), Float32, (3,3), pid=newprocs[i])
+    alg[i] = Alg2(rand(100,100), Float32, (3,3), pid=driverprocs[i])
     mon[i] = monitor(alg[i], (:tform,:u0,:workerpid))
 end
 fn = joinpath(workdir, "file4.jld")
 driver(fn, alg, img, mon)
 wpid = JLD.load(fn, "workerpid")
-indx = unique(indexin(wpid, newprocs))
-@test length(indx) == length(newprocs) && all(indx .> 0)
+indx = unique(indexin(wpid, driverprocs))
+@test length(indx) == length(driverprocs) && all(indx .> 0)
 
-rmprocs(newprocs)
+rmprocs(driverprocs)

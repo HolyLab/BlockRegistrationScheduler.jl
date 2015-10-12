@@ -2,3 +2,15 @@ Images
 JLD
 HDF5
 Formatting
+AffineTransforms
+Interpolations
+FixedSizeArrays
+
+# From BlockRegistration
+NLsolve
+MathProgBase
+Ipopt
+IterativeSolvers
+CUDArt
+CUFFT
+ForwardDiff
