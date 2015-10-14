@@ -60,6 +60,68 @@ function close!(algorithm::Apertures)
     nothing
 end
 
+"""
+`alg = Apertures(fixed, knots, maxshift, λ, [preprocess=identity]; kwargs...)`
+creates a worker-object for performing "apertured" (blocked)
+registration.  `fixed` is the reference image, `knots` specifies the
+grid of apertures, `maxshift` represents the largest shift (in pixels)
+that will be evaluated, and `λ` is the coefficient for the deformation
+penalty (higher values enforce a more affine-like
+deformation). `preprocess` allows you to apply a transformation (e.g.,
+filtering) to the `moving` images before registration; `fixed` should
+already have any such transformations applied.
+
+Alternatively, `λ` may be specified as a `(λmin, λmax)` tuple, in
+which case the "best" `λ` is chosen for you automatically via the
+algorithm described in `auto_λ`.  If you `monitor` the variable
+`datapenalty`, you can inspect the quality of the sigmoid used to
+choose `λ`.
+
+Registration is performed by calling `driver`.
+
+## Example
+
+Suppose your images are somewhat noisy, in which case a bit of
+smoothing might help considerably.  Here we'll illustrate the use of a
+pre-processing function, but see also `PreprocessSNF`.
+
+```
+   # Raw images are fixed0 and moving0, both two-dimensional
+   pp = img -> imfilter_gaussian(img, [3, 3])
+   fixed = pp(fixed0)
+   # We'll use a 5x7 grid of apertures
+   knots = (linspace(1, size(fixed,1), 5), linspace(1, size(fixed,2), 7))
+   # Allow shifts of up to 30 pixels in any direction
+   maxshift = (30,30)
+   # Try a range of λ values
+   λrange = (1e-6, 100)
+
+   # Create the algorithm-object
+   alg = Apertures(fixed, knots, maxshift, λrange, pp)
+
+   # Monitor the datapenalty, the chosen value of λ, the deformation
+   # u, and also collect the corrected (warped) image. By asking for
+   # :warped0, we apply the warping to the unfiltered moving image
+   # (:warped would refer to the filtered moving image).
+   # We pre-allocate space for :warped0 to illustrate a trick for
+   # reducing the overhead of communication between worker and driver
+   # processes, even though this example uses just a single process
+   # (see `monitor` for further detail).  The other arrays are small,
+   # so we don't worry about overhead for them.
+   mon = monitor(alg, (), Dict(:datapenalty=>0, :λ=>0, :u=>0, :warped0 => Array(Float64, size(fixed))))
+
+   # Run the algorithm
+   mon = driver(algorithm, moving0, mon)
+
+   # Plot the datapenalty and see how sigmoidal it is. Assumes you're
+   # `using Immerse`.
+   datapenalty = mon[:datapenalty]
+   λnext = λrange[1]
+   λs = Float64[(λ = λnext; λnext *= 2; λ) for i = 1:length(datapenalty)]
+   plot(x=λs, y=datapenalty, xintercept=[mon[:λ]], Geom.point, Geom.vline, Guide.xlabel("λ"), Guide.ylabel("Data penalty"), Scale.x_log10)
+```
+
+"""
 function Apertures{K,N}(fixed, knots::NTuple{N,K}, maxshift, λrange, preprocess=identity; normalization=:pixels, thresh_fac=(0.5)^ndims(fixed), thresh=nothing, correctbias::Bool=true, pid=1, dev=-1)
     gridsize = map(length, knots)
     nimages(fixed) == 1 || error("Register to a single image")
