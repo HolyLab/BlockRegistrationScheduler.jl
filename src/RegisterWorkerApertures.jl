@@ -121,7 +121,7 @@ function worker(algorithm::Apertures, img, tindex, mon)
     end
     if haskey(mon, :warped0)
         warped = warp(moving0, ϕ)
-        monitor!(mon, :warped, warped)
+        monitor!(mon, :warped0, warped)
     end
     mon
 end
