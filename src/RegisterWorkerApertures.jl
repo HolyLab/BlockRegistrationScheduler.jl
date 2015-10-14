@@ -7,8 +7,7 @@ using BlockRegistrationScheduler, RegisterWorkerShell
 
 import RegisterWorkerShell: worker, init!, close!
 
-export monitor, monitor!, worker, workerpid
-export Apertures
+export Apertures, PreprocessSNF, monitor, monitor!, worker, workerpid
 
 type Apertures{A<:AbstractArray,T,K,N} <: AbstractWorker
     fixed::A
@@ -17,7 +16,7 @@ type Apertures{A<:AbstractArray,T,K,N} <: AbstractWorker
     affinepenalty::AffinePenalty{T,N}
     λrange::Union{T,Tuple{T,T}}
     thresh::T
-    preprocess
+    preprocess  # likely of type PreprocessSNF, but could be a function
     normalization::Symbol
     correctbias::Bool
     workerpid::Int
@@ -124,6 +123,34 @@ function worker(algorithm::Apertures, img, tindex, mon)
         monitor!(mon, :warped0, warped)
     end
     mon
+end
+
+"""
+`pp = PreprocessSNF(bias, sigmalp, sigmahp)` constructs an object that
+can be used to pre-process an image as `pp(img)`. The "SNF" part of
+the name means "shot-noise filtered," meaning that this preprocessor
+is specifically designed for situations in which you are dominated by
+shot noise (i.e., from photon-counting statistics).
+
+The processing is of the form
+```
+    imgout = bandpass(√max(0,img-bias))
+```
+i.e., the image is bias-subtracted, square-root transformed (to turn
+shot noise into constant variance), and then band-pass filtered using
+Gaussian filters of width `sigmalp` (for the low-pass) and `sigmahp`
+(for the high-pass).
+"""
+type PreprocessSNF{T}  # Shot-noise filtered
+    bias::T
+    sigmalp::Vector{Float64}
+    sigmahp::Vector{Float64}
+end
+PreprocessSNF{T}(bias::T, sigmalp, sigmahp) = PreprocessSNF{T}(bias, Float64[sigmalp...], Float64[sigmahp...])
+
+function Base.call(pp::PreprocessSNF, A::AbstractArray)
+    Af = sqrt(max(0, A-pp.bias))
+    imfilter_gaussian(highpass(Af, pp.sigmahp), pp.sigmalp)
 end
 
 end # module

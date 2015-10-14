@@ -2,7 +2,7 @@ aperturedprocs = addprocs(2)
 # aperturedprocs = [myid()]
 
 using Images, TestImages, FixedSizeArrays
-using BlockRegistration, RegisterDeformation
+using BlockRegistration, RegisterDeformation, RegisterCore
 using BlockRegistrationScheduler, RegisterDriver, RegisterWorkerApertures
 
 # Work around julia #3674
@@ -39,6 +39,19 @@ mons = monitor(algorithms,
                     :mismatch => 0.0))
 driver(fn, algorithms, img, mons)
 
+# With preprocessing
+fn_pp = joinpath(tempdir(), "apertured_pp.jld")
+pp = PreprocessSNF(0.1, [2,2], [10,10])
+algorithms = Apertures[Apertures(pp(fixed), knots, maxshift, 0.001, pp; pid=p) for p in aperturedprocs]
+mons = monitor(algorithms,
+               (),
+               Dict(:u => Array(Vec{2,Float64}, gridsize),
+                    :warped => Array(Float64, size(fixed)),
+                    :warped0 => Array(Float64, size(fixed)),
+                    :mismatch => 0.0))
+driver(fn_pp, algorithms, img, mons)
+
+
 rmprocs(aperturedprocs)
 
 using JLD, RegisterCore, RegisterMismatch
@@ -50,6 +63,23 @@ jldopen(fn) do f
     for i = 1:nimages(img)
         r0 = ratio(mismatch0(fixed, img["t", i]),0)
         r1 = ratio(mismatch0(fixed, warped[:,:,i]), 0)
+        @test r0 > r1
+    end
+end
+
+jldopen(fn_pp) do f
+    mm = read(f["mismatch"])
+    @test all(mm .> 0)
+    warped = read(f["warped"])
+    for i = 1:nimages(img)
+        r0 = ratio(mismatch0(pp(fixed), img["t", i]),0)
+        r1 = ratio(mismatch0(pp(fixed), warped[:,:,i]), 0)
+        @test r0 > r1
+    end
+    warped0 = read(f["warped0"])
+    for i = 1:nimages(img)
+        r0 = ratio(mismatch0(fixed, img["t", i]),0)
+        r1 = ratio(mismatch0(fixed, warped0[:,:,i]), 0)
         @test r0 > r1
     end
 end
