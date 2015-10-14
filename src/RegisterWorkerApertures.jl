@@ -7,8 +7,7 @@ using BlockRegistrationScheduler, RegisterWorkerShell
 
 import RegisterWorkerShell: worker, init!, close!
 
-export monitor, monitor!, worker, workerpid
-export Apertures
+export Apertures, PreprocessSNF, monitor, monitor!, worker, workerpid
 
 type Apertures{A<:AbstractArray,T,K,N} <: AbstractWorker
     fixed::A
@@ -17,7 +16,7 @@ type Apertures{A<:AbstractArray,T,K,N} <: AbstractWorker
     affinepenalty::AffinePenalty{T,N}
     λrange::Union{T,Tuple{T,T}}
     thresh::T
-    preprocess
+    preprocess  # likely of type PreprocessSNF, but could be a function
     normalization::Symbol
     correctbias::Bool
     workerpid::Int
@@ -61,6 +60,68 @@ function close!(algorithm::Apertures)
     nothing
 end
 
+"""
+`alg = Apertures(fixed, knots, maxshift, λ, [preprocess=identity]; kwargs...)`
+creates a worker-object for performing "apertured" (blocked)
+registration.  `fixed` is the reference image, `knots` specifies the
+grid of apertures, `maxshift` represents the largest shift (in pixels)
+that will be evaluated, and `λ` is the coefficient for the deformation
+penalty (higher values enforce a more affine-like
+deformation). `preprocess` allows you to apply a transformation (e.g.,
+filtering) to the `moving` images before registration; `fixed` should
+already have any such transformations applied.
+
+Alternatively, `λ` may be specified as a `(λmin, λmax)` tuple, in
+which case the "best" `λ` is chosen for you automatically via the
+algorithm described in `auto_λ`.  If you `monitor` the variable
+`datapenalty`, you can inspect the quality of the sigmoid used to
+choose `λ`.
+
+Registration is performed by calling `driver`.
+
+## Example
+
+Suppose your images are somewhat noisy, in which case a bit of
+smoothing might help considerably.  Here we'll illustrate the use of a
+pre-processing function, but see also `PreprocessSNF`.
+
+```
+   # Raw images are fixed0 and moving0, both two-dimensional
+   pp = img -> imfilter_gaussian(img, [3, 3])
+   fixed = pp(fixed0)
+   # We'll use a 5x7 grid of apertures
+   knots = (linspace(1, size(fixed,1), 5), linspace(1, size(fixed,2), 7))
+   # Allow shifts of up to 30 pixels in any direction
+   maxshift = (30,30)
+   # Try a range of λ values
+   λrange = (1e-6, 100)
+
+   # Create the algorithm-object
+   alg = Apertures(fixed, knots, maxshift, λrange, pp)
+
+   # Monitor the datapenalty, the chosen value of λ, the deformation
+   # u, and also collect the corrected (warped) image. By asking for
+   # :warped0, we apply the warping to the unfiltered moving image
+   # (:warped would refer to the filtered moving image).
+   # We pre-allocate space for :warped0 to illustrate a trick for
+   # reducing the overhead of communication between worker and driver
+   # processes, even though this example uses just a single process
+   # (see `monitor` for further detail).  The other arrays are small,
+   # so we don't worry about overhead for them.
+   mon = monitor(alg, (), Dict(:datapenalty=>0, :λ=>0, :u=>0, :warped0 => Array(Float64, size(fixed))))
+
+   # Run the algorithm
+   mon = driver(algorithm, moving0, mon)
+
+   # Plot the datapenalty and see how sigmoidal it is. Assumes you're
+   # `using Immerse`.
+   datapenalty = mon[:datapenalty]
+   λnext = λrange[1]
+   λs = Float64[(λ = λnext; λnext *= 2; λ) for i = 1:length(datapenalty)]
+   plot(x=λs, y=datapenalty, xintercept=[mon[:λ]], Geom.point, Geom.vline, Guide.xlabel("λ"), Guide.ylabel("Data penalty"), Scale.x_log10)
+```
+
+"""
 function Apertures{K,N}(fixed, knots::NTuple{N,K}, maxshift, λrange, preprocess=identity; normalization=:pixels, thresh_fac=(0.5)^ndims(fixed), thresh=nothing, correctbias::Bool=true, pid=1, dev=-1)
     gridsize = map(length, knots)
     nimages(fixed) == 1 || error("Register to a single image")
@@ -121,9 +182,37 @@ function worker(algorithm::Apertures, img, tindex, mon)
     end
     if haskey(mon, :warped0)
         warped = warp(moving0, ϕ)
-        monitor!(mon, :warped, warped)
+        monitor!(mon, :warped0, warped)
     end
     mon
+end
+
+"""
+`pp = PreprocessSNF(bias, sigmalp, sigmahp)` constructs an object that
+can be used to pre-process an image as `pp(img)`. The "SNF" part of
+the name means "shot-noise filtered," meaning that this preprocessor
+is specifically designed for situations in which you are dominated by
+shot noise (i.e., from photon-counting statistics).
+
+The processing is of the form
+```
+    imgout = bandpass(√max(0,img-bias))
+```
+i.e., the image is bias-subtracted, square-root transformed (to turn
+shot noise into constant variance), and then band-pass filtered using
+Gaussian filters of width `sigmalp` (for the low-pass) and `sigmahp`
+(for the high-pass).
+"""
+type PreprocessSNF{T}  # Shot-noise filtered
+    bias::T
+    sigmalp::Vector{Float64}
+    sigmahp::Vector{Float64}
+end
+PreprocessSNF{T}(bias::T, sigmalp, sigmahp) = PreprocessSNF{T}(bias, Float64[sigmalp...], Float64[sigmahp...])
+
+function Base.call(pp::PreprocessSNF, A::AbstractArray)
+    Af = sqrt(max(0, A-pp.bias))
+    imfilter_gaussian(highpass(Af, pp.sigmahp), pp.sigmalp)
 end
 
 end # module
