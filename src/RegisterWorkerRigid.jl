@@ -1,8 +1,10 @@
+__precompile__()
+
 module RegisterWorkerRigid
 
 using Images, AffineTransforms, Interpolations
-using BlockRegistration, RegisterCore, RegisterMismatch, RegisterOptimize
-using BlockRegistrationScheduler, RegisterWorkerShell
+using RegisterCore, RegisterOptimize
+using RegisterWorkerShell
 
 import RegisterWorkerShell: worker
 
@@ -34,6 +36,10 @@ function Rigid(fixed; thresh_fac=(0.5)^ndims(fixed), thresh=nothing, SD = eye(nd
     cthresh = thresh == nothing ? thresh_fac*sumabs2(fixed) : thresh
     params = Dict{Symbol,Any}(kwargs)
     Rigid{typeof(fixed),T}(fixed, convert(T, cthresh), fixedpa, SDm, pat, params, pid)
+end
+
+function init!(algorithm::Rigid)
+    eval(:(using RegisterMismatch))
 end
 
 function worker(algorithm::Rigid, img, tindex, mon)

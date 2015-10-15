@@ -1,3 +1,5 @@
+__precompile__()
+
 module RegisterDriver
 
 using Images, JLD, HDF5, FixedSizeArrays, Formatting, RegisterWorkerShell

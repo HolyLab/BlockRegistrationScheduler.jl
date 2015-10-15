@@ -1,3 +1,5 @@
+__precompile__()
+
 module RegisterWorkerShell
 
 export AbstractWorker, AnyValue, ArrayDecl, close!, init!, maybe_sharedarray, monitor, monitor!, worker, workerpid

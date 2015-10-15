@@ -1,9 +1,11 @@
+__precompile__()
+
 module RegisterWorkerApertures
 
 using Images, AffineTransforms, Interpolations
-using BlockRegistration, RegisterCore, RegisterDeformation, RegisterFit, RegisterPenalty, RegisterOptimize
+using RegisterCore, RegisterDeformation, RegisterFit, RegisterPenalty, RegisterOptimize
 # Note: RegisterMismatch/RegisterMismatchCuda is selected below
-using BlockRegistrationScheduler, RegisterWorkerShell
+using RegisterWorkerShell
 
 import RegisterWorkerShell: worker, init!, close!
 
