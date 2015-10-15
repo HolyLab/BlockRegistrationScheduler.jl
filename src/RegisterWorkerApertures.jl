@@ -27,17 +27,17 @@ end
 function init!(algorithm::Apertures)
     if algorithm.dev >= 0
         eval(:(using CUDArt, RegisterMismatchCuda))
-        cuda_init(algorithm)
+        cuda_init!(algorithm)
     else
         eval(:(using RegisterMismatch))
     end
-    algorithm
+    nothing
 end
 
-function cuda_init(algorithm)
+function cuda_init!(algorithm)
     CUDArt.init(algorithm.dev)
     RegisterMismatchCuda.init([algorithm.dev])
-    # Allocate the CUDA objects once at the beginning. Even
+    # Allocate the CUDA objects once at the beginning: even
     # though all temporary arrays appear to be freed, repeated
     # allocation results in "out of memory" errors. (CUDA bug?)
     device(algorithm.dev)
@@ -47,6 +47,7 @@ function cuda_init(algorithm)
     gridsize = map(length, algorithm.knots)
     aperture_width = default_aperture_width(algorithm.fixed, gridsize)
     algorithm.cuda_objects[:cms] = CMStorage(Float32, aperture_width, algorithm.maxshift)
+    nothing
 end
 
 function close!(algorithm::Apertures)
