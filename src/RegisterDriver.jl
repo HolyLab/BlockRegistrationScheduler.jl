@@ -39,18 +39,23 @@ which will save `extra` only if `:extra` is a key in `mon`.
 function driver(outfile::AbstractString, algorithm::Vector, img, mon::Vector)
     nworkers = length(algorithm)
     length(mon) == nworkers || error("Number of monitors must equal number of workers")
-    # Push the algorithm objects to the worker processes. This elminates
-    # per-iteration serialization penalties, and ensures that any
-    # initalization state is retained.
-    rralgorithm = [put!(RemoteRef(workerpid(alg)), alg) for alg in algorithm]
-    # Perform any needed worker initialization
-    rrs = Array(RemoteRef, nworkers)
-    for i = 1:nworkers
-        p = workerpid(algorithm[i])
-        rrs[i] = @spawnat p init!(fetch(rralgorithm[i]))
-    end
-    for rr in enumerate(rrs)
-        fetch(rr)  # collect any errors
+    use_workerprocs = nworkers > 1 || workerpid(algorithm[1]) != myid()
+    rralgorithm = Array(RemoteRef, nworkers)
+    if use_workerprocs
+        # Push the algorithm objects to the worker processes. This elminates
+        # per-iteration serialization penalties, and ensures that any
+        # initalization state is retained.
+        for i = 1:nworkers
+            alg = algorithm[i]
+            rralgorithm[i] = put!(RemoteRef(workerpid(alg)), alg)
+        end
+        # Perform any needed worker initialization
+        @sync for i = 1:nworkers
+            p = workerpid(algorithm[i])
+            @async remotecall_fetch(p, init!, rralgorithm[i])
+        end
+    else
+        init!(algorithm[1])
     end
     try
         n = nimages(img)
@@ -96,8 +101,13 @@ function driver(outfile::AbstractString, algorithm::Vector, img, mon::Vector)
                     alg = algorithm[i]
                     @async begin
                         while (idx = getnextidx()) <= n
-                            remotecall(workerpid(alg), println, "Worker ", workerpid(alg), " is working on ", idx)
-                            mon[i] = remotecall_fetch(workerpid(alg), worker, rralgorithm[i], img, idx, mon[i])
+                            if use_workerprocs
+                                remotecall(workerpid(alg), println, "Worker ", workerpid(alg), " is working on ", idx)
+                                mon[i] = remotecall_fetch(workerpid(alg), worker, rralgorithm[i], img, idx, mon[i])
+                            else
+                                println("Working on ", idx)
+                                mon[1] = worker(algorithm[1], img, idx, mon[1])
+                            end
                             # Save the results
                             put!(writing_mutex, true)  # grab the lock
                             try
@@ -128,12 +138,13 @@ function driver(outfile::AbstractString, algorithm::Vector, img, mon::Vector)
         end
     finally
         # Perform any needed worker cleanup
-        for i = 1:nworkers
-            p = workerpid(algorithm[i])
-            rrs[i] = @spawnat p close!(fetch(rralgorithm[i]))
-        end
-        for rr in enumerate(rrs)
-            fetch(rr)  # collect any errors
+        if use_workerprocs
+            @sync for i = 1:nworkers
+                p = workerpid(algorithm[i])
+                @async remotecall_fetch(p, close!, rralgorithm[i])
+            end
+        else
+            close!(algorithm[i])
         end
     end
 end

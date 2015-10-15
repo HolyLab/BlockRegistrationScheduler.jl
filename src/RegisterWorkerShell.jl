@@ -120,6 +120,8 @@ specialize this function for your `AbstractWorker` subtype.
 """
 init!(algorithm::AbstractWorker, args...) = nothing
 
+init!(rr::RemoteRef, args...) = init!(fetch(rr), args...)
+
 """
 `close!(algorithm)` performs any necessary cleanup after a
 registration sequence using algorithm `algorithm`. The
@@ -127,6 +129,8 @@ default action is to return `nothing`. If you require cleanup,
 specialize this function for your `AbstractWorker` subtype.
 """
 close!(algorithm::AbstractWorker, args...) = nothing
+
+close!(rr::RemoteRef, args...) = close!(fetch(rr), args...)
 
 """
 `worker(algorithm, img, tindex, mon)` causes registration to be performed
