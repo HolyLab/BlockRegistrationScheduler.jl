@@ -204,16 +204,26 @@ shot noise into constant variance), and then band-pass filtered using
 Gaussian filters of width `sigmalp` (for the low-pass) and `sigmahp`
 (for the high-pass).
 """
-type PreprocessSNF{T}  # Shot-noise filtered
-    bias::T
-    sigmalp::Vector{Float64}
-    sigmahp::Vector{Float64}
+type PreprocessSNF  # Shot-noise filtered
+    bias::Float32
+    sigmalp::Vector{Float32}
+    sigmahp::Vector{Float32}
 end
-PreprocessSNF{T}(bias::T, sigmalp, sigmahp) = PreprocessSNF{T}(bias, Float64[sigmalp...], Float64[sigmahp...])
+# PreprocessSNF(bias::T, sigmalp, sigmahp) = PreprocessSNF{T}(bias, T[sigmalp...], T[sigmahp...])
 
 function Base.call(pp::PreprocessSNF, A::AbstractArray)
-    Af = sqrt(max(0, A-pp.bias))
+    Af = sqrt_subtract_bias(A, pp.bias)
     imfilter_gaussian(highpass(Af, pp.sigmahp), pp.sigmalp)
+end
+
+function sqrt_subtract_bias(A, bias)
+#    T = typeof(sqrt(one(promote_type(eltype(A), typeof(bias)))))
+    T = Float32
+    out = Array(T, size(A))
+    for I in eachindex(A)
+        @inbounds out[I] = sqrt(max(zero(T), convert(T, A[I]) - bias))
+    end
+    out
 end
 
 end # module
