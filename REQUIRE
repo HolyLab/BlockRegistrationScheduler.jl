@@ -5,12 +5,4 @@ Formatting
 AffineTransforms
 Interpolations
 FixedSizeArrays
-
-# From BlockRegistration
-NLsolve
-MathProgBase
-Ipopt
-IterativeSolvers
-CUDArt
-CUFFT
-ForwardDiff
+Reexport

@@ -1,9 +1,11 @@
+__precompile__()
+
 module RegisterWorkerApertures
 
 using Images, AffineTransforms, Interpolations
-using BlockRegistration, RegisterCore, RegisterDeformation, RegisterFit, RegisterPenalty, RegisterOptimize
+using RegisterCore, RegisterDeformation, RegisterFit, RegisterPenalty, RegisterOptimize
 # Note: RegisterMismatch/RegisterMismatchCuda is selected below
-using BlockRegistrationScheduler, RegisterWorkerShell
+using RegisterWorkerShell
 
 import RegisterWorkerShell: worker, init!, close!
 
@@ -27,17 +29,17 @@ end
 function init!(algorithm::Apertures)
     if algorithm.dev >= 0
         eval(:(using CUDArt, RegisterMismatchCuda))
-        cuda_init(algorithm)
+        cuda_init!(algorithm)
     else
         eval(:(using RegisterMismatch))
     end
-    algorithm
+    nothing
 end
 
-function cuda_init(algorithm)
+function cuda_init!(algorithm)
     CUDArt.init(algorithm.dev)
     RegisterMismatchCuda.init([algorithm.dev])
-    # Allocate the CUDA objects once at the beginning. Even
+    # Allocate the CUDA objects once at the beginning: even
     # though all temporary arrays appear to be freed, repeated
     # allocation results in "out of memory" errors. (CUDA bug?)
     device(algorithm.dev)
@@ -47,6 +49,7 @@ function cuda_init(algorithm)
     gridsize = map(length, algorithm.knots)
     aperture_width = default_aperture_width(algorithm.fixed, gridsize)
     algorithm.cuda_objects[:cms] = CMStorage(Float32, aperture_width, algorithm.maxshift)
+    nothing
 end
 
 function close!(algorithm::Apertures)
@@ -203,16 +206,26 @@ shot noise into constant variance), and then band-pass filtered using
 Gaussian filters of width `sigmalp` (for the low-pass) and `sigmahp`
 (for the high-pass).
 """
-type PreprocessSNF{T}  # Shot-noise filtered
-    bias::T
-    sigmalp::Vector{Float64}
-    sigmahp::Vector{Float64}
+type PreprocessSNF  # Shot-noise filtered
+    bias::Float32
+    sigmalp::Vector{Float32}
+    sigmahp::Vector{Float32}
 end
-PreprocessSNF{T}(bias::T, sigmalp, sigmahp) = PreprocessSNF{T}(bias, Float64[sigmalp...], Float64[sigmahp...])
+# PreprocessSNF(bias::T, sigmalp, sigmahp) = PreprocessSNF{T}(bias, T[sigmalp...], T[sigmahp...])
 
 function Base.call(pp::PreprocessSNF, A::AbstractArray)
-    Af = sqrt(max(0, A-pp.bias))
+    Af = sqrt_subtract_bias(A, pp.bias)
     imfilter_gaussian(highpass(Af, pp.sigmahp), pp.sigmalp)
+end
+
+function sqrt_subtract_bias(A, bias)
+#    T = typeof(sqrt(one(promote_type(eltype(A), typeof(bias)))))
+    T = Float32
+    out = Array(T, size(A))
+    for I in eachindex(A)
+        @inbounds out[I] = sqrt(max(zero(T), convert(T, A[I]) - bias))
+    end
+    out
 end
 
 end # module
