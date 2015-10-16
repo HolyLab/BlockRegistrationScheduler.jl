@@ -2,7 +2,8 @@ driverprocs = addprocs(2)
 
 # Work around julia #3674
 using Images, JLD, Base.Test
-using BlockRegistrationScheduler, RegisterDriver, RegisterWorkerShell
+using BlockRegistration, BlockRegistrationScheduler
+using RegisterDriver, RegisterWorkerShell
 @sync for p in driverprocs
     @spawnat p eval(quote
         using Images, JLD, Base.Test

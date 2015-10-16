@@ -61,42 +61,16 @@ function driver(outfile::AbstractString, algorithm::Vector, img, mon::Vector)
     end
     try
         n = nimages(img)
-        # Initialize the variables in the output JLD file
+        fs = FormatSpec("0$(ndigits(n))d")  # group names of unpackable objects
         jldopen(outfile, "w") do file
             dsets = Dict{Symbol,Any}()
-            have_unpackable = false
-            for (k,v) in mon[1]
-                kstr = string(k)
-                if isa(v, Number)
-                    write(file, kstr, Array(typeof(v), n))
-                    dsets[k] = file[kstr]
-                elseif isa(v, Array) || isa(v, SharedArray)
-                    if eltype(v) <: Vec
-                        v = reinterpret(eltype(eltype(v)), sdata(v), (length(eltype(v)), size(v)...))
-                    end
-                    if eltype(v) <: HDF5.HDF5BitsKind
-                        fullsz = (size(v)..., n)
-                        dsets[k] = d_create(file.plain, kstr, datatype(eltype(v)), dataspace(fullsz))
-                    else
-                        write(file, kstr, Array(eltype(v), size(v)..., n))  # might fail if it's too big, but we tried
-                    end
-                    dsets[k] = file[kstr]
-                elseif isa(v, ArrayDecl)  # maybe this never happens?
-                    fullsz = (v.arraysize..., n)
-                    dsets[k] = d_create(file.plain, kstr, datatype(eltype(v)), dataspace(fullsz))
-                else
-                    have_unpackable = true
-                end
-            end
-            fs = FormatSpec("0$(ndigits(n))d")
-            if have_unpackable
-                for i = 1:n
-                    g_create(file, string("stack", fmt(fs, i)))
-                end
-            end
+            firstsave = SharedArray(Bool, 1)
+            firstsave[1] = true
+            have_unpackable = SharedArray(Bool, 1)
+            have_unpackable[1] = false
             # Run the jobs
             nextidx = 0
-            getnextidx() = nextidx += 1 # (println("nextidx = ", nextidx); nextidx += 1)
+            getnextidx() = nextidx += 1
             writing_mutex = RemoteRef()
             @sync begin
                 for i = 1:nworkers
@@ -114,7 +88,11 @@ function driver(outfile::AbstractString, algorithm::Vector, img, mon::Vector)
                             put!(writing_mutex, true)  # grab the lock
                             try
                                 local g
-                                if have_unpackable
+                                if firstsave[]
+                                    firstsave[] = false
+                                    have_unpackable[] = initialize_jld!(dsets, file, mon[i], fs, n)
+                                end
+                                if fetch(have_unpackable[])
                                     g = file[string("stack", fmt(fs, idx))]
                                 end
                                 for (k,v) in mon[i]
@@ -146,7 +124,7 @@ function driver(outfile::AbstractString, algorithm::Vector, img, mon::Vector)
                 @async remotecall_fetch(p, close!, rralgorithm[i])
             end
         else
-            close!(algorithm[i])
+            close!(algorithm[1])
         end
     end
 end
@@ -163,6 +141,42 @@ function driver(algorithm::AbstractWorker, img, mon::Dict)
     worker(algorithm, img, 1, mon)
     close!(algorithm)
     mon
+end
+
+# Initialize the datasets in the output JLD file.
+# We wait to do this until we get back one valid `mon` object,
+# to get the sizes of any returned arrays.
+function initialize_jld!(dsets, file, mon, fs, n)
+    have_unpackable = false
+    for (k,v) in mon
+        kstr = string(k)
+        if isa(v, Number)
+            write(file, kstr, Array(typeof(v), n))
+            dsets[k] = file[kstr]
+        elseif isa(v, Array) || isa(v, SharedArray)
+            if eltype(v) <: Vec
+                v = reinterpret(eltype(eltype(v)), sdata(v), (length(eltype(v)), size(v)...))
+            end
+            if eltype(v) <: HDF5.HDF5BitsKind
+                fullsz = (size(v)..., n)
+                dsets[k] = d_create(file.plain, kstr, datatype(eltype(v)), dataspace(fullsz))
+            else
+                write(file, kstr, Array(eltype(v), size(v)..., n))  # might fail if it's too big, but we tried
+            end
+            dsets[k] = file[kstr]
+        elseif isa(v, ArrayDecl)  # maybe this never happens?
+            fullsz = (v.arraysize..., n)
+            dsets[k] = d_create(file.plain, kstr, datatype(eltype(v)), dataspace(fullsz))
+        else
+            have_unpackable = true
+        end
+    end
+    if have_unpackable
+        for i = 1:n
+            g_create(file, string("stack", fmt(fs, i)))
+        end
+    end
+    have_unpackable
 end
 
 end # module
