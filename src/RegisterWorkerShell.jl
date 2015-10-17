@@ -176,6 +176,9 @@ function maybe_sharedarray{T}(::Type{T}, sz::Dims, pid=myid())
     S
 end
 
+maybe_sharedarray(adcl::ArrayDecl, pid::Int=myid()) =
+    maybe_sharedarray(eltype(adcl), adcl.arraysize, pid)
+
 maybe_sharedarray(obj, pid::Int = myid()) = obj
 
 end
