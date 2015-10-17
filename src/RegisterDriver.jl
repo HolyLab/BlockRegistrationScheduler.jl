@@ -99,8 +99,8 @@ function driver(outfile::AbstractString, algorithm::Vector, img, mon::Vector)
                                     if isa(v, Number)
                                         dsets[k][idx] = v
                                     elseif isa(v, Array) || isa(v, SharedArray)
-                                        if eltype(v) <: Vec
-                                            v = reinterpret(eltype(eltype(v)), sdata(v), (length(eltype(v)), size(v)...))
+                                        if eltype(v) <: FixedArray
+                                            v = reinterpret(eltype(eltype(v)), sdata(v), (size(eltype(v))..., size(v)...))
                                         end
                                         colons = [Colon() for i = 1:ndims(v)]
                                         dsets[k][colons..., idx] = sdata(v)
@@ -154,8 +154,8 @@ function initialize_jld!(dsets, file, mon, fs, n)
             write(file, kstr, Array(typeof(v), n))
             dsets[k] = file[kstr]
         elseif isa(v, Array) || isa(v, SharedArray)
-            if eltype(v) <: Vec
-                v = reinterpret(eltype(eltype(v)), sdata(v), (length(eltype(v)), size(v)...))
+            if eltype(v) <: FixedArray
+                v = reinterpret(eltype(eltype(v)), sdata(v), (size(eltype(v))..., size(v)...))
             end
             if eltype(v) <: HDF5.HDF5BitsKind
                 fullsz = (size(v)..., n)
