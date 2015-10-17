@@ -69,4 +69,4 @@ wpid = JLD.load(fn, "workerpid")
 indx = unique(indexin(wpid, driverprocs))
 @test length(indx) == length(driverprocs) && all(indx .> 0)
 
-rmprocs(driverprocs)
+rmprocs(driverprocs, waitfor=1.0)
