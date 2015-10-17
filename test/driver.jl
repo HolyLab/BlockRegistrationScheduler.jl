@@ -12,7 +12,10 @@ using RegisterDriver, RegisterWorkerShell
 end
 
 push!(LOAD_PATH, splitdir(@__FILE__)[1])
-using WorkerDummy  # this is used uniquely here, so #3674 won't impact
+using WorkerDummy
+for p in driverprocs
+    remotecall_fetch(p, eval, :(using WorkerDummy))  # workaround #3674 if this is re-run
+end
 pop!(LOAD_PATH)
 
 workdir = tempname()
