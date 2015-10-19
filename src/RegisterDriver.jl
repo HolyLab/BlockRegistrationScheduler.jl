@@ -2,7 +2,9 @@ __precompile__()
 
 module RegisterDriver
 
-using Images, JLD, HDF5, FixedSizeArrays, Formatting, RegisterWorkerShell
+using Images, JLD, HDF5, FixedSizeArrays, Formatting
+using RegisterCore
+using RegisterWorkerShell
 
 export driver
 
@@ -98,15 +100,16 @@ function driver(outfile::AbstractString, algorithm::Vector, img, mon::Vector)
                                 for (k,v) in mon[i]
                                     if isa(v, Number)
                                         dsets[k][idx] = v
+                                        continue
                                     elseif isa(v, Array) || isa(v, SharedArray)
-                                        if eltype(v) <: FixedArray
-                                            v = reinterpret(eltype(eltype(v)), sdata(v), (size(eltype(v))..., size(v)...))
+                                        v = nicehdf5(v)
+                                        if eltype(v) <: HDF5.HDF5BitsKind
+                                            colons = [Colon() for i = 1:ndims(v)]
+                                            dsets[k][colons..., idx] = v
+                                            continue
                                         end
-                                        colons = [Colon() for i = 1:ndims(v)]
-                                        dsets[k][colons..., idx] = sdata(v)
-                                    else
-                                        g[string(k)] = v
                                     end
+                                    g[string(k)] = v
                                 end
                             finally
                                 take!(writing_mutex)   # release the lock
@@ -154,9 +157,7 @@ function initialize_jld!(dsets, file, mon, fs, n)
             write(file, kstr, Array(typeof(v), n))
             dsets[k] = file[kstr]
         elseif isa(v, Array) || isa(v, SharedArray)
-            if eltype(v) <: FixedArray
-                v = reinterpret(eltype(eltype(v)), sdata(v), (size(eltype(v))..., size(v)...))
-            end
+            v = nicehdf5(v)
             if eltype(v) <: HDF5.HDF5BitsKind
                 fullsz = (size(v)..., n)
                 dsets[k] = d_create(file.plain, kstr, datatype(eltype(v)), dataspace(fullsz))
@@ -178,5 +179,16 @@ function initialize_jld!(dsets, file, mon, fs, n)
     end
     have_unpackable
 end
+
+function nicehdf5{T<:FixedArray}(v::Union{Array{T},SharedArray{T}})
+    nicehdf5(reinterpret(eltype(T), sdata(v), (size(eltype(v))..., size(v)...)))
+end
+
+function nicehdf5{T<:NumDenom}(v::Union{Array{T},SharedArray{T}})
+    nicehdf5(reinterpret(eltype(T), sdata(v), (2, size(v)...)))
+end
+
+nicehdf5(v::SharedArray) = sdata(v)
+nicehdf5(v) = v
 
 end # module
