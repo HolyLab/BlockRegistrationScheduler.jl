@@ -1,4 +1,5 @@
 using Images, AffineTransforms, TestImages
+using BlockRegistration
 using BlockRegistrationScheduler, RegisterDriver, RegisterWorkerShell, RegisterWorkerRigid
 using Base.Test
 

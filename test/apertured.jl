@@ -52,7 +52,7 @@ mons = monitor(algorithms,
 driver(fn_pp, algorithms, img, mons)
 
 
-rmprocs(aperturedprocs)
+rmprocs(aperturedprocs, waitfor=1.0)
 
 using JLD, RegisterCore, RegisterMismatch
 
