@@ -1,2 +1,136 @@
 # BlockRegistrationScheduler
-Multi-core image registration scheduler
+
+This package implements various algorithms for image registration. The algorithms are encapsulated as "workers," and include the following:
+
+- `RegisterWorkerRigid`: rigid registration (rotation+translation)
+- `RegisterWorkerApertures`: deformable registration
+- `RegisterWorkerAperturesMismatch`: deformable registration in two stages (this writes "mismatch data" to disk)
+
+These workers are executed by the `driver` function found in
+`RegisterDriver`, which schedules jobs for workers running in separate
+processes.
+
+## Usage
+
+The prototypical usage is
+
+```jl
+using BlockRegistration, BlockRegistrationScheduler
+# Use RegisterDriver and the Algorithm of our choice
+using RegisterDriver, RegisterWorkerAlgorithm
+
+# Do whatever preparative work you need to do
+
+# Define the algorithm and which results we want passed back
+algorithm = Algorithm[Algorithm(parameters...) for i = 1:nprocesses]
+mon = monitor(algorithm, (:var1, :var2), Dict(:var3=>0, ...))
+
+# Run the registration
+mon = driver(outputfilename, algorithm, moving_image_sequence, mon)
+```
+
+The results are stored in the JLD file `outputfilename`. You can learn
+more about what each of these functions does from the help (e.g.,
+`?monitor`).
+
+## Example
+
+For calcium imaging data, the currently-recommended worker is
+`RegisterWorkerAperturesMismatch`. Here is a complete example of how
+one might use it:
+
+```jl
+wpids = addprocs(3)   # launch 3 worker processes
+
+using Images, SIUnits.ShortUnits, FixedSizeArrays, CUDArt, JLD
+using BlockRegistration, BlockRegistrationScheduler
+using RegisterWorkerAperturesMismatch
+
+# Here's the input file we'll be processing
+fn = "/fish_raid/donghoon/dl_revision_005/20150818/exp8_20150818.imagine"
+
+### Apertured registration
+# Load the data
+#   The mode="r" is needed if you don't have write permission to the
+#   file, or don't want to risk accidents
+img0 = load(fn, mode="r")
+# Snip out a region of interest (discard empty portions of the image stack)
+roi = (351:1120, :, :)
+img = subim(img0, roi..., :)
+# Select our "fixed" image
+fixedidx = (nimages(img)+1) >> 1
+fixed0 = getindexim(img, "t", fixedidx)
+
+# Important: you should manually inspect fixed0 to make sure there are
+# no anomalies. Do not proceed to the next step until you have done this.
+
+# Make sure the pixelspacing property is set correctly; edit the .imagine
+# file with a text editor if necessary.
+ps = img["pixelspacing"]
+# Define preprocessing. Here we'll bandpass filter between 2 pixels
+# and 25μm, but these numbers are likely to be image-dependent.
+sigmahp = Float64[25e-6m/x for x in ps]
+sigmalp = [2,2,0]
+pp = RegisterWorkerAperturesMismatch.PreprocessSNF(100, sigmalp, sigmahp)
+fixed = pp(fixed0)
+
+# Inspect fixed to see if it looks reasonable. It should be smooth
+# (blurry) enough that images will "flow" into alignment, without
+# getting trapped by pixel noise.  (When you later create the corrected
+# images, this blurring will not be present---this is used only for
+# the purpose of defining the deformation that best aligns the images.)
+# But don't blur so much that you destroy features that help with alignment.
+
+# Set up the grid of apertures for aligning the images. You should use
+# a grid that is fine enough to capture the regional differences, but
+# keep in mind that speed of processing is dramatically worsened by
+# grids that are bigger than necessary. This will likely require some
+# experimentation.
+gridsize = (15,13,5)  # or you could use round(Int, Float64[50e-6m/x for x in ps]) for one aperture each 50μm
+knots = map(d->linspace(1,size(fixed,d),gridsize[d]), (1:ndims(fixed)...))
+
+# Define the "maxshift" needed for alignment, the largest number of
+# pixels moved by any feature in the image along any axis. You should
+# be able to determine this reasonably well by just looking at the
+# images and zooming in on small regions, examining the movement over
+# time.
+# The bigger this is, the bigger the resulting mismatch file and the
+# slower processing will be.  So choose something adequate but not
+# excessive.  TODO: if necessary, perform registration in two steps: one
+# with a big mxshift and coarse grid, and then a second registration
+# with a smaller mxshift and finer grid.
+mxshift = (15,15,3)
+
+# Specify which GPUs we'll be using. See CUDArt.
+devs = 0:2
+# Create the worker algorithm structures. We assign one per worker
+# process/GPU combination.
+algorithm = AperturesMismatch[AperturesMismatch(fixed, knots, mxshift, pp; dev=devs[i],pid=wpids[i]) for i = 1:length(wpids)]
+# We'll store the variables Es, cs, Qs, and mmis. See the help for
+# AperturesMismatch.
+mon = monitor(algorithm, (:Es, :cs, :Qs, :mmis))
+
+# Wait for the GPUs to become free (if you don't do this, you might trash someone else's job!)
+wait_free(devs)
+# Define the output file and run the job
+basename = splitext(splitdir(fn)[2])[1]
+fileout = string(basename, ".mm")
+@time driver(fileout, algorithm, img, mon)
+
+# Shut down the worker processes
+rmprocs(wpids)
+
+# Append important extra information to the file
+jldopen(fileout, "r+") do io
+    write(io, "imagefile", fn)
+    write(io, "roi", roi)
+    write(io, "fixedidx", fixedidx)
+    write(io, "knots", knots)
+    write(io, "sigmalp", sigmalp)
+    write(io, "sigmahp", sigmahp)
+end
+```
+
+At the conclusion of this script's execution, `fileout` will have been
+written. You use this as the input to the optimization phase of
+registration; see the README for BlockRegistration.
