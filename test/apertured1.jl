@@ -26,11 +26,9 @@ knots = (linspace(1, size(fixed,1), 5), linspace(1, size(fixed,2), 7))
 fixedfilt = pp(fixed)
 maxshift = (30,30)
 alg = Apertures(fixedfilt, knots, maxshift, λrange, pp)
-mon = monitor(alg, (), Dict(:datapenalty=>0, :λ=>0, :u=>0, :warped0 => Array(Float64, size(fixed))))
+mon = monitor(alg, (), Dict(:λs=>0, :datapenalty=>0, :λ=>0, :u=>0, :warped0 => Array(Float64, size(fixed))))
 mon = driver(alg, moving, mon)
 datapenalty = mon[:datapenalty]
-λnext = λrange[1]
-λs = Float64[(λ = λnext; λnext *= 2; λ) for i = 1:length(datapenalty)]
 @test !all(mon[:warped0] .== 0)
 # plot(x=λs, y=datapenalty, xintercept=[mon[:λ]], Geom.point, Geom.vline, Guide.xlabel("λ"), Guide.ylabel("Data penalty"), Scale.x_log10)
 

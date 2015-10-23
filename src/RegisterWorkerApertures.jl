@@ -111,16 +111,15 @@ pre-processing function, but see also `PreprocessSNF`.
    # processes, even though this example uses just a single process
    # (see `monitor` for further detail).  The other arrays are small,
    # so we don't worry about overhead for them.
-   mon = monitor(alg, (), Dict(:datapenalty=>0, :λ=>0, :u=>0, :warped0 => Array(Float64, size(fixed))))
+   mon = monitor(alg, (), Dict(:λs=>0, :datapenalty=>0, :λ=>0, :u=>0, :warped0 => Array(Float64, size(fixed))))
 
    # Run the algorithm
    mon = driver(algorithm, moving0, mon)
 
    # Plot the datapenalty and see how sigmoidal it is. Assumes you're
    # `using Immerse`.
+   λs = mon[:λs]
    datapenalty = mon[:datapenalty]
-   λnext = λrange[1]
-   λs = Float64[(λ = λnext; λnext *= 2; λ) for i = 1:length(datapenalty)]
    plot(x=λs, y=datapenalty, xintercept=[mon[:λ]], Geom.point, Geom.vline, Guide.xlabel("λ"), Guide.ylabel("Data penalty"), Scale.x_log10)
 ```
 
@@ -172,8 +171,9 @@ function worker(algorithm::Apertures, img, tindex, mon)
     if isa(λrange, Number)
         ϕ, mismatch = RegisterOptimize.fixed_λ(cs, Qs, algorithm.knots, algorithm.affinepenalty, mmis)
     else
-        ϕ, mismatch, λ, dp, quality = RegisterOptimize.auto_λ(cs, Qs, algorithm.knots, algorithm.affinepenalty, mmis, λrange...)
+        ϕ, mismatch, λ, λs, dp, quality = RegisterOptimize.auto_λ(cs, Qs, algorithm.knots, algorithm.affinepenalty, mmis, λrange)
         monitor!(mon, :λ, λ)
+        monitor!(mon, :λs, λs)
         monitor!(mon, :datapenalty, dp)
         monitor!(mon, :sigmoid_quality, quality)
     end
