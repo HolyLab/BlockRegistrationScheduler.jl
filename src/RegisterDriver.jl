@@ -41,7 +41,7 @@ worker has been written to look for such settings:
 
 which will save `extra` only if `:extra` is a key in `mon`.
 """
-function driver(outfile::AbstractString, algorithm::Vector, img, mon::Vector)
+function driver(outfile::AbstractString, algorithm::Vector, img, mon::AbstractArray)
     nworkers = length(algorithm)
     length(mon) == nworkers || error("Number of monitors must equal number of workers")
     use_workerprocs = nworkers > 1 || workerpid(algorithm[1]) != myid()

@@ -28,10 +28,10 @@ for i = 1:20
 end
 fixed = copyproperties(fixed0, fixed)
 fixed["spatialorder"] = ["x"; "l"; "z"]
-tfm = tformrotate([0;0;1;], pi/12)
+tfm = tformrotate([0;0;1;], pi/64)
 moving = transform(fixed, tfm)
 
-alg = Rigid(fixed, pat=false, print_level=5)
+alg = Rigid(fixed, pat=false, print_level=5; max_shift=[0;0;0], max_radians=[pi/32,pi/32,pi/32])
 mon = monitor(alg, ())
 mon[:tform] = nothing
 mon[:mismatch] = 0.0
