@@ -62,6 +62,7 @@ function worker(algorithm::Rigid, img, tindex, mon)
     if haskey(mon, :warped)
         monitor!(mon, :warped, transform(moving, tfm))
     end
+    mon
 end
 
 end # module
