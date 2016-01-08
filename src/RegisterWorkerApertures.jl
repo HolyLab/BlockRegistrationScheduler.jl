@@ -5,11 +5,11 @@ module RegisterWorkerApertures
 using Images, AffineTransforms, Interpolations
 using RegisterCore, RegisterDeformation, RegisterFit, RegisterPenalty, RegisterOptimize
 # Note: RegisterMismatch/RegisterMismatchCuda is selected below
-using RegisterWorkerShell
+using RegisterWorkerShell, RegisterDriver
 
 import RegisterWorkerShell: worker, init!, close!
 
-export Apertures, PreprocessSNF, monitor, monitor!, worker, workerpid
+export Apertures, monitor, monitor!, worker, workerpid
 
 type Apertures{A<:AbstractArray,T,K,N} <: AbstractWorker
     fixed::A
@@ -188,44 +188,6 @@ function worker(algorithm::Apertures, img, tindex, mon)
         monitor!(mon, :warped0, warped)
     end
     mon
-end
-
-"""
-`pp = PreprocessSNF(bias, sigmalp, sigmahp)` constructs an object that
-can be used to pre-process an image as `pp(img)`. The "SNF" part of
-the name means "shot-noise filtered," meaning that this preprocessor
-is specifically designed for situations in which you are dominated by
-shot noise (i.e., from photon-counting statistics).
-
-The processing is of the form
-```
-    imgout = bandpass(√max(0,img-bias))
-```
-i.e., the image is bias-subtracted, square-root transformed (to turn
-shot noise into constant variance), and then band-pass filtered using
-Gaussian filters of width `sigmalp` (for the low-pass) and `sigmahp`
-(for the high-pass).
-"""
-type PreprocessSNF  # Shot-noise filtered
-    bias::Float32
-    sigmalp::Vector{Float32}
-    sigmahp::Vector{Float32}
-end
-# PreprocessSNF(bias::T, sigmalp, sigmahp) = PreprocessSNF{T}(bias, T[sigmalp...], T[sigmahp...])
-
-function Base.call(pp::PreprocessSNF, A::AbstractArray)
-    Af = sqrt_subtract_bias(A, pp.bias)
-    imfilter_gaussian(highpass(Af, pp.sigmahp), pp.sigmalp)
-end
-
-function sqrt_subtract_bias(A, bias)
-#    T = typeof(sqrt(one(promote_type(eltype(A), typeof(bias)))))
-    T = Float32
-    out = Array(T, size(A))
-    for I in eachindex(A)
-        @inbounds out[I] = sqrt(max(zero(T), convert(T, A[I]) - bias))
-    end
-    out
 end
 
 end # module
