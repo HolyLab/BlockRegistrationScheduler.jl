@@ -45,12 +45,14 @@ function cuda_init!(algorithm)
     # though all temporary arrays appear to be freed, repeated
     # allocation results in "out of memory" errors. (CUDA bug?)
     device(algorithm.dev)
-    d_fixed  = CudaPitchedArray(convert(Array{Float32}, sdata(data(algorithm.fixed))))
+    fixed = algorithm.fixed
+    T = cudatype(eltype(fixed))
+    d_fixed  = CudaPitchedArray(myconvert(Array{T}, sdata(data(fixed))))
     algorithm.cuda_objects[:d_fixed] = d_fixed
     algorithm.cuda_objects[:d_moving] = similar(d_fixed)
     gridsize = map(length, algorithm.knots)
     aperture_width = default_aperture_width(algorithm.fixed, gridsize)
-    algorithm.cuda_objects[:cms] = CMStorage(Float32, aperture_width, algorithm.maxshift)
+    algorithm.cuda_objects[:cms] = CMStorage(T, aperture_width, algorithm.maxshift)
     nothing
 end
 
@@ -121,7 +123,7 @@ function AperturesMismatch{K,N}(fixed, knots::NTuple{N,K}, maxshift, preprocess=
 end
 
 function worker(algorithm::AperturesMismatch, img, tindex, mon)
-    moving0 = timedim(img) == 0 ? img : img["t", tindex]
+    moving0 = timedim(img) == 0 ? img : slice(img, "t", tindex)
     moving = algorithm.preprocess(moving0)
     gridsize = map(length, algorithm.knots)
     use_cuda = algorithm.dev >= 0
@@ -167,5 +169,11 @@ function _copy_mm!(dest, src, colons, R)
     end
     dest
 end
+
+cudatype{T<:Union{Float32,Float64}}(::Type{T}) = T
+cudatype(::Any) = Float32
+
+myconvert{T}(::Type{Array{T}}, A::Array{T}) = A
+myconvert{T}(::Type{Array{T}}, A::AbstractArray) = copy!(Array(T, size(A)), A)
 
 end # module
