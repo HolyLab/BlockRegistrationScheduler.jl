@@ -217,9 +217,17 @@ type PreprocessSNF  # Shot-noise filtered
 end
 # PreprocessSNF(bias::T, sigmalp, sigmahp) = PreprocessSNF{T}(bias, T[sigmalp...], T[sigmahp...])
 
-function Base.call(pp::PreprocessSNF, A::AbstractArray)
+function preprocess(pp::PreprocessSNF, A::AbstractArray)
     Af = sqrt_subtract_bias(A, pp.bias)
     imfilter_gaussian(highpass(Af, pp.sigmahp), pp.sigmalp)
+end
+Base.call(pp::PreprocessSNF, A::AbstractArray) = preprocess(pp, A)
+Base.call(pp::PreprocessSNF, A::AbstractImage) = shareproperties(A, pp(data(A)))
+# For SubArrays, extend to the parent along any non-sliced
+# dimension. That way, we keep any information from padding.
+function Base.call(pp::PreprocessSNF, A::SubArray)
+    Bpad = preprocess(pp, paddedview(A))
+    trimmedview(Bpad, A)
 end
 
 function sqrt_subtract_bias(A, bias)
