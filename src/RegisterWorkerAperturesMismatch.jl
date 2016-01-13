@@ -11,8 +11,8 @@ import RegisterWorkerShell: worker, init!, close!
 
 export AperturesMismatch, monitor, monitor!, worker, workerpid
 
-type AperturesMismatch{A<:AbstractArray,T,K,N} <: AbstractWorker
-    fixed::A
+type AperturesMismatch{A<:Union{AbstractArray, Tuple{AbstractArray,AbstractArray}},T,K,N} <: AbstractWorker
+    fixed::A #the tuple case is useful when odd and even stacks have different fixed images
     knots::NTuple{N,K}
     maxshift::NTuple{N,Int}
     thresh::T
@@ -45,21 +45,32 @@ function cuda_init!(algorithm)
     # though all temporary arrays appear to be freed, repeated
     # allocation results in "out of memory" errors. (CUDA bug?)
     device(algorithm.dev)
-    fixed = algorithm.fixed
-    T = cudatype(eltype(fixed))
-    d_fixed  = CudaPitchedArray(myconvert(Array{T}, sdata(data(fixed))))
-    algorithm.cuda_objects[:d_fixed] = d_fixed
-    algorithm.cuda_objects[:d_moving] = similar(d_fixed)
     gridsize = map(length, algorithm.knots)
-    aperture_width = default_aperture_width(algorithm.fixed, gridsize)
-    algorithm.cuda_objects[:cms] = CMStorage(T, aperture_width, algorithm.maxshift)
+    if isa(algorithm.fixed, Tuple)
+	d_fixed = (CudaPitchedArray(convert(Array{Float32}, sdata(data(algorithm.fixed[1])))), CudaPitchedArray(convert(Array{Float32}, sdata(data(algorithm.fixed[2])))))
+        aperture_width = default_aperture_width(algorithm.fixed[1], gridsize)
+    else
+        d_fixed  = (CudaPitchedArray(convert(Array{Float32}, sdata(data(algorithm.fixed)))), CudaPitchedArray(convert(Array{Float32}, sdata(data(algorithm.fixed)))))
+        aperture_width = default_aperture_width(algorithm.fixed, gridsize)
+    end
+    algorithm.cuda_objects[:d_fixed] = d_fixed
+    algorithm.cuda_objects[:d_moving] = similar(d_fixed[1])
+
+    algorithm.cuda_objects[:cms] = CMStorage(Float32, aperture_width, algorithm.maxshift)
     nothing
 end
 
 function close!(algorithm::AperturesMismatch)
     if algorithm.dev >= 0
         for (k,v) in algorithm.cuda_objects
-            free(v)
+	    if k == :d_fixed
+#	        if isa(algorithm.fixed, Tuple)
+		    free(v[1]); free(v[2])
+ #           	else free(v)
+#		end
+	    else
+		free(v)
+	    end
         end
         RegisterMismatchCuda.close()
         CUDArt.close(algorithm.dev)
@@ -106,13 +117,28 @@ pre-processing function, but see also `PreprocessSNF`.
 ```
 
 """
-function AperturesMismatch{K,N}(fixed, knots::NTuple{N,K}, maxshift, preprocess=identity; normalization=:pixels, thresh_fac=(0.5)^ndims(fixed), thresh=nothing, correctbias::Bool=true, pid=1, dev=-1)
+function AperturesMismatch{K,N}(fixed, knots::NTuple{N,K}, maxshift, preprocess=identity; normalization=:pixels, thresh_fac=NaN, thresh=nothing, correctbias::Bool=true, pid=1, dev=-1)
     gridsize = map(length, knots)
-    nimages(fixed) == 1 || error("Register to a single image")
-    if thresh == nothing
-        thresh = (thresh_fac/prod(gridsize)) * (normalization==:pixels ? length(fixed) : sumabs2(fixed))
+    if isa(fixed, Tuple)
+	if isnan(thresh_fac)
+	    thresh_fac = (0.5)^ndims(fixed[1])
+	end
+	size(fixed[1]) == size(fixed[2]) || error("Even and odd fixed images must be the same size")
+        nimages(fixed[1]) == 1 && nimages(fixed[2]) ==1 || error("Register to a single image")
+	if thresh == nothing
+            thresh = (thresh_fac/prod(gridsize)) * (normalization==:pixels ? length(fixed[1]) : sumabs2(fixed[1]))
+        end
+        T = eltype(fixed[1]) <: AbstractFloat ? eltype(fixed[1]) : Float32
+    else
+	if isnan(thresh_fac)
+	    thresh_fac = (0.5)^ndims(fixed)
+	end
+	nimages(fixed) == 1 || error("Register to a single image")
+	if thresh == nothing
+            thresh = (thresh_fac/prod(gridsize)) * (normalization==:pixels ? length(fixed) : sumabs2(fixed))
+        end
+        T = eltype(fixed) <: AbstractFloat ? eltype(fixed) : Float32
     end
-    T = eltype(fixed) <: AbstractFloat ? eltype(fixed) : Float32
     # T = Float64   # Ipopt requires Float64
     Es = ArrayDecl(Array{T,N}, gridsize)
     cs = ArrayDecl(Array{Vec{N,T},N}, gridsize)
@@ -124,12 +150,16 @@ end
 
 function worker(algorithm::AperturesMismatch, img, tindex, mon)
     moving0 = timedim(img) == 0 ? img : slice(img, "t", tindex)
-    moving = algorithm.preprocess(moving0)
+    moving = algorithm.preprocess(moving0,tindex)
     gridsize = map(length, algorithm.knots)
     use_cuda = algorithm.dev >= 0
     if use_cuda
         device(algorithm.dev)
-        d_fixed  = algorithm.cuda_objects[:d_fixed]
+	if isodd(tindex)
+            d_fixed  = algorithm.cuda_objects[:d_fixed][1]
+        else
+	    d_fixed  = algorithm.cuda_objects[:d_fixed][2]
+	end
         d_moving = algorithm.cuda_objects[:d_moving]
         cms      = algorithm.cuda_objects[:cms]
         copy!(d_moving, moving)
@@ -138,7 +168,11 @@ function worker(algorithm::AperturesMismatch, img, tindex, mon)
         mms = allocate_mmarrays(eltype(cms), gridsize, algorithm.maxshift)
         mismatch_apertures!(mms, d_fixed, d_moving, aperture_centers, cms; normalization=algorithm.normalization)
     else
-        mms = mismatch_apertures(algorithm.fixed, moving, gridsize, algorithm.maxshift; normalization=algorithm.normalization)
+	if isodd(tindex)
+            mms = mismatch_apertures(algorithm.fixed[1], moving, gridsize, algorithm.maxshift; normalization=algorithm.normalization)
+	else
+            mms = mismatch_apertures(algorithm.fixed[2], moving, gridsize, algorithm.maxshift; normalization=algorithm.normalization)
+	end
     end
     # displaymismatch(mms, thresh=10)
     if algorithm.correctbias
@@ -173,7 +207,42 @@ end
 cudatype{T<:Union{Float32,Float64}}(::Type{T}) = T
 cudatype(::Any) = Float32
 
-myconvert{T}(::Type{Array{T}}, A::Array{T}) = A
-myconvert{T}(::Type{Array{T}}, A::AbstractArray) = copy!(Array(T, size(A)), A)
+"""
+`pp = PreprocessSNF(bias, sigmalp, sigmahp)` constructs an object that
+can be used to pre-process an image as `pp(img)`. The "SNF" part of
+the name means "shot-noise filtered," meaning that this preprocessor
+is specifically designed for situations in which you are dominated by
+shot noise (i.e., from photon-counting statistics).
+
+The processing is of the form
+```
+    imgout = bandpass(√max(0,img-bias))
+```
+i.e., the image is bias-subtracted, square-root transformed (to turn
+shot noise into constant variance), and then band-pass filtered using
+Gaussian filters of width `sigmalp` (for the low-pass) and `sigmahp`
+(for the high-pass).
+"""
+type PreprocessSNF  # Shot-noise filtered
+    bias::Float32
+    sigmalp::Vector{Float32}
+    sigmahp::Vector{Float32}
+end
+# PreprocessSNF(bias::T, sigmalp, sigmahp) = PreprocessSNF{T}(bias, T[sigmalp...], T[sigmahp...])
+
+function Base.call(pp::PreprocessSNF, A::AbstractArray, tindex=0)
+    Af = sqrt_subtract_bias(A, pp.bias)
+    imfilter_gaussian(highpass(Af, pp.sigmahp), pp.sigmalp)
+end
+
+function sqrt_subtract_bias(A, bias)
+#    T = typeof(sqrt(one(promote_type(eltype(A), typeof(bias)))))
+    T = Float32
+    out = Array(T, size(A))
+    for I in eachindex(A)
+        @inbounds out[I] = sqrt(max(zero(T), convert(T, A[I]) - bias))
+    end
+    out
+end
 
 end # module
