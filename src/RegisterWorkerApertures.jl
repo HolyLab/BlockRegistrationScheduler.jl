@@ -8,6 +8,7 @@ using RegisterCore, RegisterDeformation, RegisterFit, RegisterPenalty, RegisterO
 using RegisterWorkerShell, RegisterDriver
 
 import RegisterWorkerShell: worker, init!, close!
+import Base.identity
 
 export Apertures, monitor, monitor!, worker, workerpid
 
@@ -66,6 +67,8 @@ function close!(algorithm::Apertures)
     nothing
 end
 
+identity(img, tindex) = identity(img)
+
 """
 `alg = Apertures(fixed, knots, maxshift, λ, [preprocess=identity]; kwargs...)`
 creates a worker-object for performing "apertured" (blocked)
@@ -74,8 +77,9 @@ grid of apertures, `maxshift` represents the largest shift (in pixels)
 that will be evaluated, and `λ` is the coefficient for the deformation
 penalty (higher values enforce a more affine-like
 deformation). `preprocess` allows you to apply a transformation (e.g.,
-filtering) to the `moving` images before registration; `fixed` should
-already have any such transformations applied.
+filtering or warping) to the `moving` images before registration.  It should
+be a function of this form: f(img, tindex) where tindex is the time index of the
+moving image. `fixed` should already have any such transformations applied.
 
 Alternatively, `λ` may be specified as a `(λmin, λmax)` tuple, in
 which case the "best" `λ` is chosen for you automatically via the
@@ -144,7 +148,7 @@ end
 
 function worker(algorithm::Apertures, img, tindex, mon)
     moving0 = timedim(img) == 0 ? img : slice(img, "t", tindex)
-    moving = algorithm.preprocess(moving0)
+    moving = algorithm.preprocess(moving0, tindex)
     gridsize = map(length, algorithm.knots)
     use_cuda = algorithm.dev >= 0
     if use_cuda
