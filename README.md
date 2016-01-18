@@ -33,9 +33,109 @@ The results are stored in the JLD file `outputfilename`. You can learn
 more about what each of these functions does from the help (e.g.,
 `?monitor`).
 
-## Example
+## Stack-by-stack registration example
 
-For calcium imaging data, the currently-recommended worker is
+```jl
+wpids = addprocs(8)  # use 8 worker processes (no CUDA)
+
+using Images, SIUnits.ShortUnits, FixedSizeArrays, JLD, MAT
+using BlockRegistration, BlockRegistrationScheduler
+using RegisterWorkerApertures
+
+# Here's the input file we'll be processing
+fn = "exp1_20150814.imagine"
+
+### Apertured registration
+# Load the data
+#   The mode="r" is needed if you don't have write permission to the
+#   file, or don't want to risk accidents
+img0 = load(fn, mode="r")
+# Snip out a region of interest (discard empty portions of the image stack)
+roi = (751:950, 821:1045, 12:28)
+img = subim(img0, roi..., :)  # you could alternatively select a subset of times
+# Select our "fixed" image
+fixedidx = (nimages(img)+1) >> 1
+fixed0 = sliceim(img, "t", fixedidx)
+
+# Important: you should manually inspect fixed0 to make sure there are
+# no anomalies. Do not proceed to the next step until you have done this.
+
+# Make sure the pixelspacing property is set correctly; edit the .imagine
+# file with a text editor if necessary.
+ps = img["pixelspacing"]
+# Define preprocessing. Here we'll bandpass filter between 2 pixels
+# and 25μm, but these numbers are likely to be image-dependent.
+sigmahp = Float64[25e-6m/x for x in ps]
+sigmalp = [0,0,0]  # lowpass filtering is not currently recommended
+pp = PreprocessSNF(100, sigmalp, sigmahp)
+fixed = copy(pp(fixed0))  # use copy because of julia #14625
+
+# Set up the grid of apertures for aligning the images. You should use
+# a grid that is fine enough to capture the regional differences, but
+# keep in mind that speed of processing is dramatically worsened by
+# grids that are bigger than necessary. This will likely require some
+# experimentation.
+gridsize = (15,15,9)  # or you could use round(Int, Float64[50e-6m/x for x in ps]) for one aperture each 50μm
+knots = map(d->linspace(1,size(fixed,d),gridsize[d]), (1:ndims(fixed)...))
+
+# Define the "maxshift" needed for alignment, the largest number of
+# pixels moved by any feature in the image along any axis. You should
+# be able to determine this reasonably well by just looking at the
+# images and zooming in on small regions, examining the movement over
+# time.
+mxshift = (15,15,3)
+
+# Choose volume regularization penalty. See the README for
+# BlockRegistration and `fixed_λ`.
+λ = 0.01
+
+# Create the worker algorithm structures. We assign one per worker process.
+algorithm = Apertures[Apertures(fixed, knots, mxshift, λ, pp; pid=wpids[i], correctbias=false) for i = 1:length(wpids)]
+mon = monitor(algorithm, (), Dict{Symbol,Any}(:u=>ArrayDecl(Array{Vec{3,Float64},3}, gridsize)))
+
+# Define the output file and run the job
+basename = splitext(splitdir(fn)[2])[1]
+@show basename
+fileout = string(basename, ".register")
+@time driver(fileout, algorithm, img, mon)
+
+# Append important extra information to the file
+jldopen(fileout, "r+") do io
+    write(io, "imagefile", fn)
+    write(io, "roi", roi)
+    write(io, "fixedidx", fixedidx)
+    write(io, "knots", knots)
+    write(io, "sigmalp", sigmalp)
+    write(io, "sigmahp", sigmahp)
+end
+```
+
+To warp the images:
+```jl
+# Read the image data and deformation
+using Images, ImagineFormat, FileIO
+u = load(fileout, "u")
+roi = load(fileout, "roi")
+knots = load(fileout, "knots")
+img0 = load(fn, mode="r")
+img = sliceim(img0, roi..., :)
+
+# You might also use `tinterpolate` in the following call, if you processed
+# a subset of time slices. (Be sure to save the particular slices to that
+# JLD file!)
+ϕs = medfilt(griddeformations(u, knots), 3)
+
+# Write the warped image
+basename = "exp1_20150814_register_tinyblock"
+open(string(basename, ".cam"), "w") do file
+    warp!(Float32, file, img, ϕs; nworkers=3)
+end
+ImagineFormat.save_header(string(basename, ".imagine"), fn, img, Float32)
+```
+
+## Whole-experiment optimization example
+
+For calcium imaging data, an alternative worker is
 `RegisterWorkerAperturesMismatch`. Here is a complete example of how
 one might use it:
 
