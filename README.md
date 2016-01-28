@@ -88,11 +88,15 @@ mxshift = (15,15,3)
 # Choose volume regularization penalty. See the README for
 # BlockRegistration and `fixed_λ`.
 λ = 0.01
+overlap_t = (10, 10, 2)  # Pixels in each dimention 
+                         # Currently not recomended. (0 generally works better)
 
-apertureoverlap = 0;  #Aperture overlap ratio (e.g. 0.2 (20%))
-                      #Currently not recomended. (0 generally works better)
-aperture_width = default_aperture_width(fixed, gridsize) # Obtain the default aperture width.
-overlap_t = map(x->round(Int64,x*apertureoverlap), aperture_width) 
+### Optional: Set the aperture overlap by ratio; 
+#using RegisterMismatch
+#apertureoverlap = 0.2;  # Aperture overlap ratio (e.g. 0.2 (20%)); Currently not recomended. (0 generally works better)
+#aperture_width = default_aperture_width(fixed, gridsize) # Obtain the default aperture width.
+#overlap_t = map(x->round(Int64,x*apertureoverlap), aperture_width) 
+
 # Create the worker algorithm structures. We assign one per worker process.
 algorithm = Apertures[Apertures(fixed, knots, mxshift, λ, pp; overlap = overlap_t, pid=wpids[i], correctbias=false) for i = 1:length(wpids)]
 mon = monitor(algorithm, (), Dict{Symbol,Any}(:u=>ArrayDecl(Array{Vec{3,Float64},3}, gridsize)))
