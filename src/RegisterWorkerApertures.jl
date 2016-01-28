@@ -14,8 +14,9 @@ export Apertures, monitor, monitor!, worker, workerpid
 type Apertures{A<:AbstractArray,T,K,N} <: AbstractWorker
     fixed::A
     knots::NTuple{N,K}
-    maxshift::NTuple{N,Int}
+    maxshift::NTuple{N,Int}   
     affinepenalty::AffinePenalty{T,N}
+    overlap::NTuple{N,Int}
     λrange::Union{T,Tuple{T,T}}
     thresh::T
     preprocess  # likely of type PreprocessSNF, but could be a function
@@ -126,8 +127,10 @@ pre-processing function, but see also `PreprocessSNF`.
 ```
 
 """
-function Apertures{K,N}(fixed, knots::NTuple{N,K}, maxshift, λrange, preprocess=identity; normalization=:pixels, thresh_fac=(0.5)^ndims(fixed), thresh=nothing, correctbias::Bool=true, pid=1, dev=-1)
+function Apertures{K,N}(fixed, knots::NTuple{N,K}, maxshift, λrange, preprocess=identity; overlap=zeros(Int, N), normalization=:pixels, thresh_fac=(0.5)^ndims(fixed), thresh=nothing, correctbias::Bool=true, pid=1, dev=-1)
     gridsize = map(length, knots)
+    overlap_t = (overlap...) #Make tuple
+    length(overlap) == N || throw(DimensionMismatch("overlap must have $N entries"))
     nimages(fixed) == 1 || error("Register to a single image")
     isa(λrange, Number) || isa(λrange, NTuple{2}) || error("λrange must be a number or 2-tuple")
     if thresh == nothing
@@ -136,7 +139,7 @@ function Apertures{K,N}(fixed, knots::NTuple{N,K}, maxshift, λrange, preprocess
     # T = eltype(fixed) <: AbstractFloat ? eltype(fixed) : Float32
     T = Float64   # Ipopt requires Float64
     λrange = isa(λrange, Number) ? T(λrange) : (T(first(λrange)), T(last(λrange)))
-    Apertures{typeof(fixed),T,K,N}(fixed, knots, maxshift, AffinePenalty{T,N}(knots, first(λrange)), λrange, T(thresh), preprocess, normalization, correctbias, pid, dev, Dict{Symbol,Any}())
+    Apertures{typeof(fixed),T,K,N}(fixed, knots, maxshift, AffinePenalty{T,N}(knots, first(λrange)), overlap_t, λrange, T(thresh), preprocess, normalization, correctbias, pid, dev, Dict{Symbol,Any}())
 end
 
 function worker(algorithm::Apertures, img, tindex, mon)
@@ -155,7 +158,11 @@ function worker(algorithm::Apertures, img, tindex, mon)
         mms = allocate_mmarrays(eltype(cms), gridsize, algorithm.maxshift)
         mismatch_apertures!(mms, d_fixed, d_moving, aperture_centers, cms; normalization=algorithm.normalization)
     else
-        mms = mismatch_apertures(algorithm.fixed, moving, gridsize, algorithm.maxshift; normalization=algorithm.normalization)
+        #mms = mismatch_apertures(algorithm.fixed, moving, gridsize, algorithm.maxshift; normalization=algorithm.normalization)
+        cs = coords_spatial(img) #
+        aperture_centers = aperture_grid(size(img)[cs], gridsize)  #
+        aperture_width = default_aperture_width(algorithm.fixed, gridsize, algorithm.overlap)  #
+        mms = mismatch_apertures(algorithm.fixed, moving, aperture_centers, aperture_width, algorithm.maxshift; normalization=algorithm.normalization)  #
     end
     # displaymismatch(mms, thresh=10)
     if algorithm.correctbias

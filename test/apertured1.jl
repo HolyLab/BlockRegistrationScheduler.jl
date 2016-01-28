@@ -46,22 +46,46 @@ mon = Dict{Symbol,Any}(:u => Array(Vec{2,Float64}, gridsize),
                        :warped => copy(moving))
 mon = driver(algorithm, moving, mon)
 
+# With aperture overlap
+using RegisterMismatch
+apertureoverlap = 0.3;  #Aperture overlap percentage (between 0 and 1)
+aperture_width = default_aperture_width(fixed, gridsize)
+overlap_t = map(x->round(Int64,x*apertureoverlap), aperture_width)
+algorithm = RegisterWorkerApertures.Apertures(fixed, knots, maxshift, λrange; overlap=overlap_t)
+mon_overlap = Dict{Symbol,Any}(:u => Array(Vec{2,Float64}, gridsize),
+                       :mismatch => 0.0,
+                       :λ => 0.0,
+                       :datapenalty => 0,
+                       :sigmoid_quality => 0.0,
+                       :warped => copy(moving))
+mon_overlap = driver(algorithm, moving, mon_overlap)
+
+
+
 # Analysis
 ϕ = GridDeformation(mon[:u], knots)
+ϕ_overlap = GridDeformation(mon_overlap[:u], knots)
+
 gd0 = warpgrid(ϕ_dfm, showidentity=true)
 ϕi = interpolate(ϕ_dfm)
+
 gd1 = warpgrid(ϕi(interpolate(ϕ)), showidentity=true)
+gd1_overlap = warpgrid(ϕi(interpolate(ϕ_overlap)), showidentity=true)
 
 using RegisterMismatch, RegisterCore
 r0 = ratio(mismatch0(fixed, moving), 0)
 r1 = ratio(mismatch0(fixed, mon[:warped]), 0)
+r1_overlap = ratio(mismatch0(fixed, mon_overlap[:warped]), 0)
 @test r1 < r0
+@test r1_overlap < r0
 
 # Consider:
+# using RegisterGUI
 # ImagePlayer.view(gd0)
 # ImagePlayer.view(gd1)
 # showoverlay(fixed, moving)
 # showoverlay(fixed, mon[:warped])
+#
 # plot(x=λs, y=mon[:datapenalty], xintercept=[mon[:λ]], Geom.point, Geom.vline, Guide.xlabel("λ"), Guide.ylabel("Data penalty"), Scale.x_log10)
 
 nothing
