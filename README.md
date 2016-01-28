@@ -40,7 +40,7 @@ wpids = addprocs(8)  # use 8 worker processes (no CUDA)
 
 using Images, SIUnits.ShortUnits, FixedSizeArrays, JLD, MAT
 using BlockRegistration, BlockRegistrationScheduler
-using RegisterWorkerApertures
+using RegisterWorkerApertures, RegisterMismatch
 
 # Here's the input file we'll be processing
 fn = "exp1_20150814.imagine"
@@ -66,7 +66,7 @@ ps = img["pixelspacing"]
 # Define preprocessing. Here we'll bandpass filter between 2 pixels
 # and 25μm, but these numbers are likely to be image-dependent.
 sigmahp = Float64[25e-6m/x for x in ps]
-sigmalp = [0,0,0]  # lowpass filtering is not currently recommended
+sigmalp = [0,0,0]  # Lowpass-filtering can help registration but breaks bias correction.
 pp = PreprocessSNF(100, sigmalp, sigmahp)
 fixed = copy(pp(fixed0))  # use copy because of julia #14625
 
@@ -89,8 +89,12 @@ mxshift = (15,15,3)
 # BlockRegistration and `fixed_λ`.
 λ = 0.01
 
+apertureoverlap = 0;  #Aperture overlap ratio (e.g. 0.2 (20%))
+                      #Currently not recomended. (0 generally works better)
+aperture_width = default_aperture_width(fixed, gridsize) # Obtain the default aperture width.
+overlap_t = map(x->round(Int64,x*apertureoverlap), aperture_width) 
 # Create the worker algorithm structures. We assign one per worker process.
-algorithm = Apertures[Apertures(fixed, knots, mxshift, λ, pp; pid=wpids[i], correctbias=false) for i = 1:length(wpids)]
+algorithm = Apertures[Apertures(fixed, knots, mxshift, λ, pp; overlap = overlap_t, pid=wpids[i], correctbias=false) for i = 1:length(wpids)]
 mon = monitor(algorithm, (), Dict{Symbol,Any}(:u=>ArrayDecl(Array{Vec{3,Float64},3}, gridsize)))
 
 # Define the output file and run the job
