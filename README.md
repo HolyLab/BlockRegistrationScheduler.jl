@@ -89,13 +89,13 @@ mxshift = (15,15,3)
 # BlockRegistration and `fixed_λ`.
 λ = 0.01
 
-## Setting aperture overlap (Optional)
-#overlap_t = (10, 10, 2)   # Set the number of overlapping pixels in each dimension 
-#Othersize, aperture overlap ratio can be used instead of the number of overlapping pixels:
-#using RegisterMismatch
-#apertureoverlap = 0.2;  # Aperture overlap ratio (e.g. 0.2 (20%)); 0 generally works fine
-#aperture_width = default_aperture_width(fixed, gridsize) # Obtain the default aperture width.
-#overlap_t = map(x->round(Int64,x*apertureoverlap), aperture_width) 
+## Set up aperture overlap (Optional)
+# overlap_t = (10, 10, 2)   # Set the number of overlapping pixels in each dimension 
+## Otherwise, aperture overlap ratio can be used instead of the number of overlapping pixels:
+# using RegisterMismatch
+# apertureoverlap = 0.2;  # Aperture overlap ratio (e.g. 0.2 (20%)); 0 generally works fine
+# aperture_width = default_aperture_width(fixed, gridsize) # Obtain the default aperture width.
+# overlap_t = map(x->round(Int64,x*apertureoverlap), aperture_width) 
 
 # Create the worker algorithm structures. We assign one per worker process.
 algorithm = Apertures[Apertures(fixed, knots, mxshift, λ, pp; overlap = overlap_t, pid=wpids[i], correctbias=false) for i = 1:length(wpids)]
