@@ -72,14 +72,15 @@ function worker(algorithm::Rigid, img, tindex, mon)
     f = deepcopy(data(algorithm.fixed))
     m = data(moving)
 #     print("here4\n")
-    if haskey(algorithm.params, "max_radians") || haskey(algorithm.params, "max_shift")
+@show algorithm.params
+    if haskey(algorithm.params, :max_radians) || haskey(algorithm.params, :max_shift)
         gsearch = true
     else
         gsearch = false
     end
-    
-    max_radians = [get(algorithm.params, :max_radians, fill(pi, ndims(moving) == 2 ? 1 : ndims(moving)))...]
-    max_shift0 = [get(algorithm.params, :max_shift, [floor(Int, size(moving,x)/2) for x=1:ndims(moving)])...]
+   @show gsearch 
+@show     max_radians = [get(algorithm.params, :max_radians, fill(pi, ndims(moving) == 2 ? 1 : ndims(moving)))...]
+@show    max_shift0 = [get(algorithm.params, :max_shift, [floor(Int, size(moving,x)/2) for x=1:ndims(moving)])...]
     SD = deepcopy(algorithm.SD)
     if issubtype(eltype(max_shift0), SIUnits.SIQuantity) #convert to pixel units
         max_shift0 = ceil(Int, map(float, max_shift0)./(diag(SD))) #assumes max_shift and SD are in the same units
@@ -115,6 +116,9 @@ function worker(algorithm::Rigid, img, tindex, mon)
         rotp, dx, best_mm = shift_rot_gridsearch(f,m,max_radians, max_shift, SD; mm_norm=mm_norm, thresh=algorithm.thresh)
         rotm = length(rotp) == 1 ? rotation2(rotp) : rotation3(rotp)        
         tfm = AffineTransform(rotm, dx)
+		@show rotp
+		@show dx
+		@show best_mm
     end
     restr_factors = convert(Array{Float64}, [2^x for x in num_restrictions])
     
@@ -215,7 +219,7 @@ end
 #2D
 function shift_rot_gridsearch{T1,T2}(f::AbstractArray{T1,2}, m::AbstractArray{T2,2}, max_radians::Vector, max_shift::Vector, SD::Matrix ; mm_norm=:intensity, thresh = 0)
     if all(x->isfinite(x), max_radians)
-        incr = pi/128  #TODO: make this user-specified
+        incr = pi/256  #TODO: make this user-specified
         r_rngs = [-max_radians[i]:incr:max_radians[i] for i=1:length(max_radians)]
         rotp = zeros(length(max_radians))
         dx = zeros(length(max_shift))
