@@ -14,7 +14,7 @@ export Apertures, monitor, monitor!, worker, workerpid
 type Apertures{A<:AbstractArray,T,K,N} <: AbstractWorker
     fixed::A
     knots::NTuple{N,K}
-    maxshift::NTuple{N,Int}   
+    maxshift::NTuple{N,Int}
     affinepenalty::AffinePenalty{T,N}
     overlap::NTuple{N,Int}
     λrange::Union{T,Tuple{T,T}}
@@ -143,7 +143,7 @@ function Apertures{K,N}(fixed, knots::NTuple{N,K}, maxshift, λrange, preprocess
 end
 
 function worker(algorithm::Apertures, img, tindex, mon)
-    moving0 = timedim(img) == 0 ? img : slice(img, "t", tindex)
+    moving0 = timedim(img) == 0 ? img : view(img, "t", tindex)
     moving = algorithm.preprocess(moving0)
     gridsize = map(length, algorithm.knots)
     use_cuda = algorithm.dev >= 0

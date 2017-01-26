@@ -122,7 +122,7 @@ specialize this function for your `AbstractWorker` subtype.
 """
 init!(algorithm::AbstractWorker, args...) = nothing
 
-init!(rr::RemoteRef, args...) = init!(fetch(rr), args...)
+init!(rr::RemoteChannel, args...) = init!(fetch(rr), args...)
 
 """
 `close!(algorithm)` performs any necessary cleanup after a
@@ -132,7 +132,7 @@ specialize this function for your `AbstractWorker` subtype.
 """
 close!(algorithm::AbstractWorker, args...) = nothing
 
-close!(rr::RemoteRef, args...) = close!(fetch(rr), args...)
+close!(rr::RemoteChannel, args...) = close!(fetch(rr), args...)
 
 """
 `worker(algorithm, img, tindex, mon)` causes registration to be performed
@@ -145,7 +145,7 @@ You must define this function for your `AbstractWorker` subtype.
 """
 worker(algorithm::AbstractWorker, img, tindex, mon) = error("Worker modules must define `worker`")
 
-worker(rr::RemoteRef, img, tindex, mon) = worker(fetch(rr), img, tindex, mon)
+worker(rr::RemoteChannel, img, tindex, mon) = worker(fetch(rr), img, tindex, mon)
 
 """
 `workerpid(algorithm)` extracts the `pid` associated with the worker

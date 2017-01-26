@@ -14,7 +14,7 @@ end
 push!(LOAD_PATH, splitdir(@__FILE__)[1])
 using WorkerDummy
 for p in driverprocs
-    remotecall_fetch(p, eval, :(using WorkerDummy))  # workaround #3674 if this is re-run
+    remotecall_fetch(eval, p, :(using WorkerDummy))  # workaround #3674 if this is re-run
 end
 pop!(LOAD_PATH)
 
