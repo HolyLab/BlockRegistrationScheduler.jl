@@ -45,19 +45,19 @@ function driver(outfile::AbstractString, algorithm::Vector, img, mon::Vector)
     nworkers = length(algorithm)
     length(mon) == nworkers || error("Number of monitors must equal number of workers")
     use_workerprocs = nworkers > 1 || workerpid(algorithm[1]) != myid()
-    rralgorithm = Array(RemoteRef, nworkers)
+    rralgorithm = Array{RemoteChannel}(nworkers)
     if use_workerprocs
         # Push the algorithm objects to the worker processes. This elminates
         # per-iteration serialization penalties, and ensures that any
         # initalization state is retained.
         for i = 1:nworkers
             alg = algorithm[i]
-            rralgorithm[i] = put!(RemoteRef(workerpid(alg)), alg)
+            rralgorithm[i] = put!(RemoteChannel(workerpid(alg)), alg)
         end
         # Perform any needed worker initialization
         @sync for i = 1:nworkers
             p = workerpid(algorithm[i])
-            @async remotecall_fetch(p, init!, rralgorithm[i])
+            @async remotecall_fetch(init!, p, rralgorithm[i])
         end
     else
         init!(algorithm[1])
@@ -74,15 +74,15 @@ function driver(outfile::AbstractString, algorithm::Vector, img, mon::Vector)
             # Run the jobs
             nextidx = 0
             getnextidx() = nextidx += 1
-            writing_mutex = RemoteRef()
+            writing_mutex = RemoteChannel()
             @sync begin
                 for i = 1:nworkers
                     alg = algorithm[i]
                     @async begin
                         while (idx = getnextidx()) <= n
                             if use_workerprocs
-                                remotecall(workerpid(alg), println, "Worker ", workerpid(alg), " is working on ", idx)
-                                mon[i] = remotecall_fetch(workerpid(alg), worker, rralgorithm[i], img, idx, mon[i])
+                                remotecall(println, workerpid(alg), "Worker ", workerpid(alg), " is working on ", idx)
+                                mon[i] = remotecall_fetch(worker, workerpid(alg), rralgorithm[i], img, idx, mon[i])
                             else
                                 println("Working on ", idx)
                                 mon[1] = worker(algorithm[1], img, idx, mon[1])
@@ -125,7 +125,7 @@ function driver(outfile::AbstractString, algorithm::Vector, img, mon::Vector)
         if use_workerprocs
             @sync for i = 1:nworkers
                 p = workerpid(algorithm[i])
-                @async remotecall_fetch(p, close!, rralgorithm[i])
+                @async remotecall_fetch(close!, p, rralgorithm[i])
             end
         else
             close!(algorithm[1])
@@ -221,11 +221,11 @@ function preprocess(pp::PreprocessSNF, A::AbstractArray)
     Af = sqrt_subtract_bias(A, pp.bias)
     imfilter_gaussian(highpass(Af, pp.sigmahp), pp.sigmalp)
 end
-Base.call(pp::PreprocessSNF, A::AbstractArray) = preprocess(pp, A)
-Base.call(pp::PreprocessSNF, A::AbstractImage) = shareproperties(A, pp(data(A)))
+(pp::PreprocessSNF)(A::AbstractArray) = preprocess(pp, A)
+(pp::PreprocessSNF)(A::AbstractImage) = shareproperties(A, pp(data(A)))
 # For SubArrays, extend to the parent along any non-sliced
 # dimension. That way, we keep any information from padding.
-function Base.call(pp::PreprocessSNF, A::SubArray)
+function (pp::PreprocessSNF)(A::SubArray)
     Bpad = preprocess(pp, paddedview(A))
     trimmedview(Bpad, A)
 end

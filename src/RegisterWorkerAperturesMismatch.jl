@@ -123,7 +123,7 @@ function AperturesMismatch{K,N}(fixed, knots::NTuple{N,K}, maxshift, preprocess=
 end
 
 function worker(algorithm::AperturesMismatch, img, tindex, mon)
-    moving0 = timedim(img) == 0 ? img : slice(img, "t", tindex)
+    moving0 = timedim(img) == 0 ? img : view(img, "t", tindex)
     moving = algorithm.preprocess(moving0)
     gridsize = map(length, algorithm.knots)
     use_cuda = algorithm.dev >= 0

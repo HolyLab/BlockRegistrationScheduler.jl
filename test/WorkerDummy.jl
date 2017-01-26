@@ -31,10 +31,10 @@ function Alg2{T}(fixed, ::Type{T}, sz; pid=1)
 end
 
 type Alg3 <: Alg
-    string::ASCIIString
+    string::String
     workerpid::Int
 end
-function Alg3(s::ASCIIString; pid=1)
+function Alg3(s::String; pid=1)
     Alg3(s, pid)
 end
 
