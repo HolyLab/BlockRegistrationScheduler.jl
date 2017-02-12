@@ -55,7 +55,7 @@ roi = (751:950, 821:1045, 12:28)
 img = subim(img0, roi..., :)  # you could alternatively select a subset of times
 # Select our "fixed" image
 fixedidx = (nimages(img)+1) >> 1
-fixed0 = sliceim(img, "t", fixedidx)
+fixed0 = view(img, timeaxis(img)(fixedidx))
 
 # Important: you should manually inspect fixed0 to make sure there are
 # no anomalies. Do not proceed to the next step until you have done this.
@@ -92,13 +92,13 @@ mxshift = (15,15,3)
 # Create the worker algorithm structures. We assign one per worker process.
 algorithm = Apertures[Apertures(fixed, knots, mxshift, λ, pp; pid=wpids[i], correctbias=false) for i = 1:length(wpids)]
 ## Set up aperture overlap (Optional)
-# overlap_t = (10, 10, 2)   # Set the number of overlapping pixels in each dimension 
+# overlap_t = (10, 10, 2)   # Set the number of overlapping pixels in each dimension
 # algorithm = Apertures[Apertures(fixed, knots, mxshift, λ, pp; overlap = overlap_t, pid=wpids[i], correctbias=false) for i = 1:length(wpids)]
 ## Aperture overlap ratio can be used instead of the number of overlapping pixels:
 # using RegisterMismatch
 # apertureoverlap = 0.2;  # Aperture overlap ratio (e.g. 0.2 (20%)); 0 generally works fine
 # aperture_width = default_aperture_width(fixed, gridsize) # Obtain the default aperture width.
-# overlap_t = map(x->round(Int64,x*apertureoverlap), aperture_width) 
+# overlap_t = map(x->round(Int64,x*apertureoverlap), aperture_width)
 mon = monitor(algorithm, (), Dict{Symbol,Any}(:u=>ArrayDecl(Array{Vec{3,Float64},3}, gridsize)))
 
 # Define the output file and run the job
@@ -167,7 +167,7 @@ roi = (351:1120, :, :)
 img = subim(img0, roi..., :)
 # Select our "fixed" image
 fixedidx = (nimages(img)+1) >> 1
-fixed0 = getindexim(img, "t", fixedidx)
+fixed0 = img[timeaxis(img)(fixedidx)]
 
 # Important: you should manually inspect fixed0 to make sure there are
 # no anomalies. Do not proceed to the next step until you have done this.

@@ -43,7 +43,7 @@ function init!(algorithm::Rigid)
 end
 
 function worker(algorithm::Rigid, img, tindex, mon)
-    moving = timedim(img) == 0 ? img : img["t", tindex]
+    moving = getindex_t(img, tindex)
     if algorithm.pat
         tfms = pat_rotation(algorithm.fixedpa, moving, algorithm.SD)
         mov_etp = extrapolate(interpolate(moving, BSpline(Quadratic(Flat())), OnCell()), NaN)
@@ -53,7 +53,7 @@ function worker(algorithm::Rigid, img, tindex, mon)
     else
         tfm = tformeye(ndims(moving))
     end
-    tfm, mismatch = optimize_rigid(data(algorithm.fixed), data(moving), tfm, [size(algorithm.fixed)...]/2, algorithm.SD, thresh=algorithm.thresh; print_level=get(algorithm.params, :print_level, 0))
+    tfm, mismatch = optimize_rigid(algorithm.fixed, moving, tfm, [size(algorithm.fixed)...]/2, algorithm.SD, thresh=algorithm.thresh; print_level=get(algorithm.params, :print_level, 0))
 
     # There are no Rigid parameters that are expected as outputs,
     # so no need to call monitor!(mon, algorithm)
