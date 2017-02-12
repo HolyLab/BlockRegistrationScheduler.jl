@@ -77,30 +77,48 @@ rmprocs(aperturedprocs, waitfor=1.0)
 
 using JLD, RegisterCore, RegisterMismatch
 
+jldopen(fnt) do f
+    mm = read(f["mismatch"])
+    u = read(f["u"])
+    @test maxabs(u+u_dfmt) < 0.5
+    warped = read(f["warped"])
+    for i = 1:nimages(img)
+        r0 = ratio(mismatch0(fixed, imgt[tax(i)]),0)
+        r1 = ratio(mismatch0(fixed, warped[:,:,i]), 0)
+        @test r0 > r1
+    end
+end
+
+nfailures = 0
+
 jldopen(fn) do f
+    global nfailures
     mm = read(f["mismatch"])
     @test all(mm .> 0)
     warped = read(f["warped"])
     for i = 1:nimages(img)
         r0 = ratio(mismatch0(fixed, img[tax(i)]),0)
         r1 = ratio(mismatch0(fixed, warped[:,:,i]), 0)
-        @test r0 > r1
+        nfailures += r0 <= r1
     end
 end
 
 jldopen(fn_pp) do f
+    global nfailures
     mm = read(f["mismatch"])
     @test all(mm .> 0)
     warped = read(f["warped"])
     for i = 1:nimages(img)
         r0 = ratio(mismatch0(pp(fixed), pp(img[tax(i)])),0)
         r1 = ratio(mismatch0(pp(fixed), warped[:,:,i]), 0)
-        @test r0 > r1
+        nfailures += r0 <= r1
     end
     warped0 = read(f["warped0"])
     for i = 1:nimages(img)
         r0 = ratio(mismatch0(fixed, img[tax(i)]),0)
         r1 = ratio(mismatch0(fixed, warped0[:,:,i]), 0)
-        @test r0 > r1
+        nfailures += r0 <= r1
     end
 end
+
+@test nfailures <= 2
