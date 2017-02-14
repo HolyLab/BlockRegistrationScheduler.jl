@@ -143,7 +143,7 @@ function Apertures{K,N}(fixed, knots::NTuple{N,K}, maxshift, λrange, preprocess
 end
 
 function worker(algorithm::Apertures, img, tindex, mon)
-    moving0 = timedim(img) == 0 ? img : view(img, "t", tindex)
+    moving0 = getindex_t(img, tindex)
     moving = algorithm.preprocess(moving0)
     gridsize = map(length, algorithm.knots)
     use_cuda = algorithm.dev >= 0
@@ -154,13 +154,13 @@ function worker(algorithm::Apertures, img, tindex, mon)
         cms      = algorithm.cuda_objects[:cms]
         copy!(d_moving, moving)
         cs = coords_spatial(img)
-        aperture_centers = aperture_grid(size(img)[cs], gridsize)
+        aperture_centers = aperture_grid(size(img, cs...), gridsize)
         mms = allocate_mmarrays(eltype(cms), gridsize, algorithm.maxshift)
         mismatch_apertures!(mms, d_fixed, d_moving, aperture_centers, cms; normalization=algorithm.normalization)
     else
         #mms = mismatch_apertures(algorithm.fixed, moving, gridsize, algorithm.maxshift; normalization=algorithm.normalization)
         cs = coords_spatial(img) #
-        aperture_centers = aperture_grid(size(img)[cs], gridsize)  #
+        aperture_centers = aperture_grid(size(img, cs...), gridsize)  #
         aperture_width = default_aperture_width(algorithm.fixed, gridsize, algorithm.overlap)  #
         mms = mismatch_apertures(algorithm.fixed, moving, aperture_centers, aperture_width, algorithm.maxshift; normalization=algorithm.normalization)  #
     end

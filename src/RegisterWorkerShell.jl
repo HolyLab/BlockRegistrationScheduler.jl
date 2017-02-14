@@ -2,7 +2,9 @@ __precompile__()
 
 module RegisterWorkerShell
 
-export AbstractWorker, AnyValue, ArrayDecl, close!, init!, maybe_sharedarray, monitor, monitor!, worker, workerpid
+using SimpleTraits, AxisArrays, ImageAxes
+
+export AbstractWorker, AnyValue, ArrayDecl, close!, init!, maybe_sharedarray, monitor, monitor!, worker, workerpid, getindex_t
 
 """
 An `AbstractWorker` type performs registration on a single
@@ -180,5 +182,14 @@ maybe_sharedarray(adcl::ArrayDecl, pid::Int=myid()) =
     maybe_sharedarray(eltype(adcl), adcl.arraysize, pid)
 
 maybe_sharedarray(obj, pid::Int = myid()) = obj
+
+@traitfn getindex_t{AA<:AxisArray; HasTimeAxis{AA}}(img::AA, tindex) = view(img, timeaxis(img)(tindex))
+"""
+    getindex_t(img, tindex)
+
+Take a time-slice of `img` at time `tindex`. If `img` doesn't have a
+`:time` axis, this just returns `img`.
+"""
+getindex_t(img, tindex) = img
 
 end

@@ -24,12 +24,12 @@ gridsize = (5,5)
 ntimes = 4
 shift_amplitude = 5
 u_dfm = shift_amplitude*randn(2, gridsize..., ntimes)
-img = copyproperties(fixed, SharedArray(Float64, (size(fixed)..., ntimes), pids = union(myid(), aperturedprocs)))
-img["timedim"] = 3
+img = AxisArray(SharedArray(Float64, (size(fixed)..., ntimes), pids = union(myid(), aperturedprocs)), :y, :x, :time)
 knots = map(d->linspace(1,size(fixed,d),gridsize[d]), (1,2))
+tax = timeaxis(img)
 for i = 1:ntimes
     ϕ_dfm = GridDeformation(u_dfm[:,:,:,i], knots)
-    img["t", i] = warp(fixed, ϕ_dfm)
+    img[tax(i)] = warp(fixed, ϕ_dfm)
 end
 # Perform the registration
 fn = joinpath(workdir, "apertured.jld")
@@ -68,7 +68,7 @@ cs, Qs, mmis = jldopen(fn, mmaparrays=true) do file
 end
 ϕs, mismatch = fixed_λ(cs, Qs, knots, AffinePenalty(knots, 0.001), 1e-5, mmis)
 for t = 1:nimages(img)
-    moving = getindexim(img, "t", t)
+    moving = img[tax(t)]
     warped = warp(moving, ϕs[t])
     r_m = ratio(mismatch0(fixed, moving), 0)
     r_w = ratio(mismatch0(fixed, warped), 0)

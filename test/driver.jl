@@ -21,7 +21,7 @@ pop!(LOAD_PATH)
 workdir = tempname()
 mkdir(workdir)
 
-img = Image(SharedArray(Float32, (100,100,7)), timedim=3)
+img = AxisArray(SharedArray(Float32, (100,100,7)), :y, :x, :time)
 
 # Single-process tests
 # Simple operation & passing back scalars

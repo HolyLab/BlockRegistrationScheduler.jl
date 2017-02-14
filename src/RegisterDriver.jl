@@ -219,10 +219,10 @@ end
 
 function preprocess(pp::PreprocessSNF, A::AbstractArray)
     Af = sqrt_subtract_bias(A, pp.bias)
-    imfilter_gaussian(highpass(Af, pp.sigmahp), pp.sigmalp)
+    imfilter(highpass(Af, pp.sigmahp), KernelFactors.IIRGaussian((pp.sigmalp...)))
 end
 (pp::PreprocessSNF)(A::AbstractArray) = preprocess(pp, A)
-(pp::PreprocessSNF)(A::AbstractImage) = shareproperties(A, pp(data(A)))
+(pp::PreprocessSNF)(A::ImageMeta) = shareproperties(A, pp(data(A)))
 # For SubArrays, extend to the parent along any non-sliced
 # dimension. That way, we keep any information from padding.
 function (pp::PreprocessSNF)(A::SubArray)

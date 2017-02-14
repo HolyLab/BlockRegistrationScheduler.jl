@@ -11,17 +11,17 @@ shift_amplitude = 10
 u_dfm = shift_amplitude*randn(2, gridsizeg...)
 knotsg = map(d->linspace(1,size(img,d),gridsizeg[d]), (1,2))
 ϕ_dfm = GridDeformation(u_dfm, knotsg)
-wimg = copyproperties(img, warp(img, ϕ_dfm))
+wimg = warp(img, ϕ_dfm)
 o = 3*shift_amplitude
-fixed = getindexim(img, o+1:size(img,1)-o, o+1:size(img,2)-o)
-moving = getindexim(wimg, o+1:size(img,1)-o, o+1:size(img,2)-o)
+fixed = img[o+1:size(img,1)-o, o+1:size(img,2)-o]
+moving = wimg[o+1:size(img,1)-o, o+1:size(img,2)-o]
 
 # Set up the range of λ, and prepare for plotting
 λrange = (1e-6,10)
 
 # To make sure it runs, try the example in the docs, even though it's
 # not well-tuned for this case
-pp = img -> imfilter_gaussian(img, [3, 3])
+pp = img -> imfilter(img, KernelFactors.IIRGaussian((3,3)))
 knots = (linspace(1, size(fixed,1), 5), linspace(1, size(fixed,2), 7))
 fixedfilt = pp(fixed)
 maxshift = (30,30)
