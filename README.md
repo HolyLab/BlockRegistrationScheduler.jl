@@ -38,9 +38,13 @@ more about what each of these functions does from the help (e.g.,
 ```jl
 wpids = addprocs(8)  # use 8 worker processes (no CUDA)
 
-using Images, SIUnits.ShortUnits, FixedSizeArrays, JLD, MAT
+using Images, Unitful, FixedSizeArrays, JLD, MAT, AxisArrays
 using BlockRegistration, BlockRegistrationScheduler
 using RegisterWorkerApertures
+
+# Some physical units we'll need
+const μm = u"μm"  # micrometers
+const s  = u"s"   # seconds
 
 # Here's the input file we'll be processing
 fn = "exp1_20150814.imagine"
@@ -52,7 +56,7 @@ fn = "exp1_20150814.imagine"
 img0 = load(fn, mode="r")
 # Snip out a region of interest (discard empty portions of the image stack)
 roi = (751:950, 821:1045, 12:28)
-img = subim(img0, roi..., :)  # you could alternatively select a subset of times
+img = view(img0, roi..., :)  # you could alternatively select a subset of times
 # Select our "fixed" image
 fixedidx = (nimages(img)+1) >> 1
 fixed0 = view(img, timeaxis(img)(fixedidx))
@@ -62,20 +66,25 @@ fixed0 = view(img, timeaxis(img)(fixedidx))
 
 # Make sure the pixelspacing property is set correctly; edit the .imagine
 # file with a text editor if necessary.
-ps = img["pixelspacing"]
-# Define preprocessing. Here we'll bandpass filter between 2 pixels
-# and 25μm, but these numbers are likely to be image-dependent.
-sigmahp = Float64[25e-6m/x for x in ps]
+ps = pixelspacing(img)
+# Define preprocessing. Here we'll highpass filter over 25μm, but these
+# numbers are likely to be image-dependent.
+σ = 25μm
+sigmahp = Float64[σ/x for x in ps]
 sigmalp = [0,0,0]  # lowpass filtering is not currently recommended
-pp = PreprocessSNF(100, sigmalp, sigmahp)
-fixed = copy(pp(fixed0))  # use copy because of julia #14625
+
+# The pco cameras have a bias of 100 in "digital number"
+# units. Convert this into the units of the image intensity
+bias = reinterpret(eltype(img0), UInt16(100))
+pp = PreprocessSNF(bias, sigmalp, sigmahp)
+fixed = pp(fixed0)
 
 # Set up the grid of apertures for aligning the images. You should use
 # a grid that is fine enough to capture the regional differences, but
 # keep in mind that speed of processing is dramatically worsened by
 # grids that are bigger than necessary. This will likely require some
 # experimentation.
-gridsize = (15,15,9)  # or you could use round(Int, Float64[50e-6m/x for x in ps]) for one aperture each 50μm
+gridsize = (15,15,9)  # or you could use round(Int, Float64[50μm/x for x in ps]) for one aperture each 50μm
 knots = map(d->linspace(1,size(fixed,d),gridsize[d]), (1:ndims(fixed)...))
 
 # Define the "maxshift" needed for alignment, the largest number of
@@ -126,7 +135,7 @@ u = load(fileout, "u")
 roi = load(fileout, "roi")
 knots = load(fileout, "knots")
 img0 = load(fn, mode="r")
-img = sliceim(img0, roi..., :)
+img = view(img0, roi..., :)
 
 # You might also use `tinterpolate` in the following call, if you processed
 # a subset of time slices. (Be sure to save the particular slices to that
@@ -150,9 +159,13 @@ one might use it:
 ```jl
 wpids = addprocs(3)   # launch 3 worker processes
 
-using Images, SIUnits.ShortUnits, FixedSizeArrays, CUDArt, JLD
+using Images, Unitful, FixedSizeArrays, CUDArt, JLD, AxisArrays
 using BlockRegistration, BlockRegistrationScheduler
 using RegisterWorkerAperturesMismatch
+
+# Some physical units we'll need
+const μm = u"μm"  # micrometers
+const s  = u"s"   # seconds
 
 # Here's the input file we'll be processing
 fn = "/fish_raid/donghoon/dl_revision_005/20150818/exp8_20150818.imagine"
@@ -164,7 +177,7 @@ fn = "/fish_raid/donghoon/dl_revision_005/20150818/exp8_20150818.imagine"
 img0 = load(fn, mode="r")
 # Snip out a region of interest (discard empty portions of the image stack)
 roi = (351:1120, :, :)
-img = subim(img0, roi..., :)
+img = view(img0, roi..., :)
 # Select our "fixed" image
 fixedidx = (nimages(img)+1) >> 1
 fixed0 = img[timeaxis(img)(fixedidx)]
@@ -175,26 +188,32 @@ fixed0 = img[timeaxis(img)(fixedidx)]
 # Make sure the pixelspacing property is set correctly; edit the .imagine
 # file with a text editor if necessary.
 ps = img["pixelspacing"]
-# Define preprocessing. Here we'll bandpass filter between 2 pixels
-# and 25μm, but these numbers are likely to be image-dependent.
-sigmahp = Float64[25e-6m/x for x in ps]
-sigmalp = [2,2,0]
-pp = RegisterWorkerAperturesMismatch.PreprocessSNF(100, sigmalp, sigmahp)
+# Define preprocessing. Here we'll highpass filter over 25μm, but these
+# numbers are likely to be image-dependent.
+sigmahp = Float64[25μm/x for x in ps]
+sigmalp = [0,0,0]
+
+# The pco cameras have a bias of 100 in "digital number"
+# units. Convert this into the units of the image intensity
+bias = reinterpret(eltype(img0), UInt16(100))
+pp = PreprocessSNF(bias, sigmalp, sigmahp)
 fixed = pp(fixed0)
 
-# Inspect fixed to see if it looks reasonable. It should be smooth
-# (blurry) enough that images will "flow" into alignment, without
-# getting trapped by pixel noise.  (When you later create the corrected
+# Inspect fixed to see if it looks reasonable. If your images are very
+# noisy, you might need to do some smoothing (adjust sigmalp) to
+# ensure that images will "flow" into alignment, without getting
+# trapped by pixel noise.  (When you later create the corrected
 # images, this blurring will not be present---this is used only for
-# the purpose of defining the deformation that best aligns the images.)
-# But don't blur so much that you destroy features that help with alignment.
+# the purpose of defining the deformation that best aligns the
+# images.)  But don't blur so much that you destroy features that help
+# with alignment.
 
 # Set up the grid of apertures for aligning the images. You should use
 # a grid that is fine enough to capture the regional differences, but
 # keep in mind that speed of processing is dramatically worsened by
 # grids that are bigger than necessary. This will likely require some
 # experimentation.
-gridsize = (15,13,5)  # or you could use round(Int, Float64[50e-6m/x for x in ps]) for one aperture each 50μm
+gridsize = (15,13,5)  # or you could use round(Int, Float64[50μm/x for x in ps]) for one aperture each 50μm
 knots = map(d->linspace(1,size(fixed,d),gridsize[d]), (1:ndims(fixed)...))
 
 # Define the "maxshift" needed for alignment, the largest number of
