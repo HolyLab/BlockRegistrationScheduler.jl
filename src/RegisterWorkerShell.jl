@@ -2,7 +2,7 @@ __precompile__()
 
 module RegisterWorkerShell
 
-using SimpleTraits, AxisArrays, ImageAxes
+using SimpleTraits, AxisArrays, ImageAxes, ImageMetadata
 
 export AbstractWorker, AnyValue, ArrayDecl, close!, init!, maybe_sharedarray, monitor, monitor!, worker, workerpid, getindex_t
 
@@ -183,13 +183,15 @@ maybe_sharedarray(adcl::ArrayDecl, pid::Int=myid()) =
 
 maybe_sharedarray(obj, pid::Int = myid()) = obj
 
-@traitfn getindex_t{AA<:AxisArray; HasTimeAxis{AA}}(img::AA, tindex) = view(img, timeaxis(img)(tindex))
 """
     getindex_t(img, tindex)
 
 Take a time-slice of `img` at time `tindex`. If `img` doesn't have a
 `:time` axis, this just returns `img`.
 """
-getindex_t(img, tindex) = img
+getindex_t(img, tindex) = _getindex_t(img, timeaxis(img), tindex)
+_getindex_t(img, ::Void, tindex) = img
+_getindex_t(img, tax::Axis, tindex) = view(img, tax(tindex))
+
 
 end
