@@ -1,5 +1,6 @@
 using Images, TestImages, StaticArrays, Interpolations
 using BlockRegistration, BlockRegistrationScheduler
+using RegisterMismatch
 using RegisterDriver, RegisterWorkerApertures, RegisterDeformation
 using Base.Test
 
