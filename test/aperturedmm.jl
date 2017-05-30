@@ -1,14 +1,14 @@
 aperturedprocs = addprocs(2)
 # aperturedprocs = [myid()]
 
-using Images, TestImages, FixedSizeArrays
+using Images, TestImages, StaticArrays
 using BlockRegistration, RegisterDeformation, RegisterCore, RegisterOptimize
 using BlockRegistrationScheduler, RegisterDriver, RegisterWorkerAperturesMismatch
 
 # Work around julia #3674
 @sync for p in aperturedprocs
     @spawnat p eval(quote
-        using Images, TestImages, FixedSizeArrays
+        using Images, TestImages, StaticArrays
         using BlockRegistration, RegisterDeformation
         using BlockRegistrationScheduler, RegisterDriver, RegisterWorkerAperturesMismatch
     end)

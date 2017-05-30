@@ -1,14 +1,14 @@
 aperturedprocs = addprocs(2)
 # aperturedprocs = [myid()]
 
-using Images, TestImages, FixedSizeArrays
+using Images, TestImages, StaticArrays
 using BlockRegistration, RegisterDeformation, RegisterCore
 using BlockRegistrationScheduler, RegisterDriver, RegisterWorkerApertures
 
 # Work around julia #3674
 @sync for p in aperturedprocs
     @spawnat p eval(quote
-        using Images, TestImages, FixedSizeArrays
+        using Images, TestImages, StaticArrays
         using BlockRegistration, RegisterDeformation
         using BlockRegistrationScheduler, RegisterDriver, RegisterWorkerApertures
     end)
@@ -34,8 +34,8 @@ maxshift = (3*shift_amplitude, 3*shift_amplitude)
 algorithms = Apertures[Apertures(fixed, knots, maxshift, 0.001; pid=p) for p in aperturedprocs]
 mons = monitor(algorithms,
                (),
-               Dict(:u => Array(Vec{2,Float64}, gridsize),
-                    :warped => Array(Float64, size(fixed)),
+               Dict(:u => Array{SVector{2,Float64}}(gridsize),
+                    :warped => Array{Float64}(size(fixed)),
                     :mismatch => 0.0))
 driver(fn, algorithms, img, mons)
 
@@ -45,9 +45,9 @@ pp = PreprocessSNF(0.1, [2,2], [10,10])
 algorithms = Apertures[Apertures(pp(fixed), knots, maxshift, 0.001, pp; pid=p) for p in aperturedprocs]
 mons = monitor(algorithms,
                (),
-               Dict(:u => Array(Vec{2,Float64}, gridsize),
-                    :warped => Array(Float64, size(fixed)),
-                    :warped0 => Array(Float64, size(fixed)),
+               Dict(:u => Array{SVector{2,Float64}}(gridsize),
+                    :warped => Array{Float64}(size(fixed)),
+                    :warped0 => Array{Float64}(size(fixed)),
                     :mismatch => 0.0))
 driver(fn_pp, algorithms, img, mons)
 
@@ -66,8 +66,8 @@ maxshift = (3*shift_amplitude, 3*shift_amplitude)
 algorithms = Apertures[Apertures(fixed, knots, maxshift, 0.001; pid=p) for p in aperturedprocs]
 mons = monitor(algorithms,
                (),
-               Dict(:u => Array(Vec{2,Float64}, gridsize),
-                    :warped => Array(Float64, size(fixed)),
+               Dict(:u => Array{SVector{2,Float64}}(gridsize),
+                    :warped => Array{Float64}(size(fixed)),
                     :mismatch => 0.0))
 driver(fnt, algorithms, imgt, mons)
 

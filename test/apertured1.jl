@@ -1,4 +1,4 @@
-using Images, TestImages, FixedSizeArrays, Interpolations
+using Images, TestImages, StaticArrays, Interpolations
 using BlockRegistration, BlockRegistrationScheduler
 using RegisterDriver, RegisterWorkerApertures, RegisterDeformation
 using Base.Test
@@ -38,7 +38,7 @@ knots = map(d->linspace(1,size(fixed,d),gridsize[d]), (1,2))
 umax = maximum(abs(u_dfm))
 maxshift = (ceil(Int, umax)+5, ceil(Int, umax)+5)
 algorithm = RegisterWorkerApertures.Apertures(fixed, knots, maxshift, λrange)
-mon = Dict{Symbol,Any}(:u => Array(Vec{2,Float64}, gridsize),
+mon = Dict{Symbol,Any}(:u => Array{SVector{2,Float64}}(gridsize),
                        :mismatch => 0.0,
                        :λ => 0.0,
                        :datapenalty => 0,
@@ -52,7 +52,7 @@ apertureoverlap = 0.3;  #Aperture overlap percentage (between 0 and 1)
 aperture_width = default_aperture_width(fixed, gridsize)
 overlap_t = map(x->round(Int64,x*apertureoverlap), aperture_width)
 algorithm = RegisterWorkerApertures.Apertures(fixed, knots, maxshift, λrange; overlap=overlap_t)
-mon_overlap = Dict{Symbol,Any}(:u => Array(Vec{2,Float64}, gridsize),
+mon_overlap = Dict{Symbol,Any}(:u => Array{SVector{2,Float64}}(gridsize),
                        :mismatch => 0.0,
                        :λ => 0.0,
                        :datapenalty => 0,

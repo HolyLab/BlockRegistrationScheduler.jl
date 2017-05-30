@@ -2,7 +2,7 @@ __precompile__()
 
 module RegisterDriver
 
-using Images, JLD, HDF5, FixedSizeArrays, Formatting
+using Images, JLD, HDF5, StaticArrays, Formatting
 using RegisterCore
 using RegisterWorkerShell
 
@@ -183,7 +183,7 @@ function initialize_jld!(dsets, file, mon, fs, n)
     have_unpackable
 end
 
-function nicehdf5{T<:FixedArray}(v::Union{Array{T},SharedArray{T}})
+function nicehdf5{T<:StaticArray}(v::Union{Array{T},SharedArray{T}})
     nicehdf5(reinterpret(eltype(T), sdata(v), (size(eltype(v))..., size(v)...)))
 end
 
