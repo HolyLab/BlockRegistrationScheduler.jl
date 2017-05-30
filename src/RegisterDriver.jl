@@ -81,8 +81,10 @@ function driver(outfile::AbstractString, algorithm::Vector, img, mon::Vector)
                     @async begin
                         while (idx = getnextidx()) <= n
                             if use_workerprocs
-                                remotecall(println, workerpid(alg), "Worker ", workerpid(alg), " is working on ", idx)
-                                mon[i] = remotecall_fetch(worker, workerpid(alg), rralgorithm[i], img, idx, mon[i])
+                                remotecall_fetch(println, workerpid(alg), "Worker ", workerpid(alg), " is working on ", idx)
+                                # See https://github.com/JuliaLang/julia/issues/22139
+                                tmp = remotecall_fetch(worker, workerpid(alg), rralgorithm[i], img, idx, mon[i])
+                                copy_all_but_shared!(mon[i], tmp)
                             else
                                 println("Working on ", idx)
                                 mon[1] = worker(algorithm[1], img, idx, mon[1])
@@ -192,6 +194,14 @@ end
 nicehdf5(v::SharedArray) = sdata(v)
 nicehdf5(v) = v
 
+function copy_all_but_shared!(dest, src)
+    for (k, v) in src
+        if !isa(v, SharedArray)
+            dest[k] = v
+        end
+    end
+    dest
+end
 
 """
 `pp = PreprocessSNF(bias, sigmalp, sigmahp)` constructs an object that
