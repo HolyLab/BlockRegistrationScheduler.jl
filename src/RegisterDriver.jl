@@ -229,7 +229,7 @@ end
 
 function preprocess(pp::PreprocessSNF, A::AbstractArray)
     Af = sqrt_subtract_bias(A, pp.bias)
-    imfilter(highpass(Af, pp.sigmahp), KernelFactors.IIRGaussian((pp.sigmalp...)))
+    imfilter(highpass(Af, pp.sigmahp), KernelFactors.IIRGaussian((pp.sigmalp...)), NA())
 end
 (pp::PreprocessSNF)(A::AbstractArray) = preprocess(pp, A)
 (pp::PreprocessSNF)(A::ImageMeta) = shareproperties(A, pp(data(A)))
