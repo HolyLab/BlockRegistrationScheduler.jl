@@ -24,7 +24,7 @@ gridsize = (5,5)
 ntimes = 4
 shift_amplitude = 5
 u_dfm = shift_amplitude*randn(2, gridsize..., ntimes)
-img = AxisArray(SharedArray(Float64, (size(fixed)..., ntimes), pids = union(myid(), aperturedprocs)), :y, :x, :time)
+img = AxisArray(SharedArray{Float64}((size(fixed)..., ntimes), pids = union(myid(), aperturedprocs)), :y, :x, :time)
 knots = map(d->linspace(1,size(fixed,d),gridsize[d]), (1,2))
 tax = timeaxis(img)
 for i = 1:ntimes

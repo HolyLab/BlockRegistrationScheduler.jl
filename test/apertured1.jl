@@ -26,7 +26,7 @@ knots = (linspace(1, size(fixed,1), 5), linspace(1, size(fixed,2), 7))
 fixedfilt = pp(fixed)
 maxshift = (30,30)
 alg = Apertures(fixedfilt, knots, maxshift, λrange, pp)
-mon = monitor(alg, (), Dict(:λs=>0, :datapenalty=>0, :λ=>0, :u=>0, :warped0 => Array(Float64, size(fixed))))
+mon = monitor(alg, (), Dict(:λs=>0, :datapenalty=>0, :λ=>0, :u=>0, :warped0 => Array{Float64}(size(fixed))))
 mon = driver(alg, moving, mon)
 datapenalty = mon[:datapenalty]
 @test !all(mon[:warped0] .== 0)
@@ -35,7 +35,7 @@ datapenalty = mon[:datapenalty]
 # Perform the registration
 gridsize = (17,17)  # for correction
 knots = map(d->linspace(1,size(fixed,d),gridsize[d]), (1,2))
-umax = maximum(abs(u_dfm))
+umax = maximum(abs.(u_dfm))
 maxshift = (ceil(Int, umax)+5, ceil(Int, umax)+5)
 algorithm = RegisterWorkerApertures.Apertures(fixed, knots, maxshift, λrange)
 mon = Dict{Symbol,Any}(:u => Array{SVector{2,Float64}}(gridsize),

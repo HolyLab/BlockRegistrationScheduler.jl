@@ -21,7 +21,7 @@ fixed = testimage("cameraman")
 gridsize = (5,5)
 shift_amplitude = 5
 u_dfm = shift_amplitude*randn(2, gridsize..., 4)
-img = AxisArray(SharedArray(Float64, (size(fixed)..., 4), pids = union(myid(), aperturedprocs)), :y, :x, :time)
+img = AxisArray(SharedArray{Float64}((size(fixed)..., 4), pids = union(myid(), aperturedprocs)), :y, :x, :time)
 tax = timeaxis(img)
 knots = map(d->linspace(1,size(fixed,d),gridsize[d]), (1,2))
 for i = 1:4
@@ -80,7 +80,7 @@ using JLD, RegisterCore, RegisterMismatch
 jldopen(fnt) do f
     mm = read(f["mismatch"])
     u = read(f["u"])
-    @test maxabs(u+u_dfmt) < 0.5
+    @test maximum(abs, u+u_dfmt) < 0.5
     warped = read(f["warped"])
     for i = 1:nimages(img)
         r0 = ratio(mismatch0(fixed, imgt[tax(i)]),0)

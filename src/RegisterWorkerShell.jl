@@ -3,6 +3,7 @@ __precompile__()
 module RegisterWorkerShell
 
 using SimpleTraits, AxisArrays, ImageAxes, ImageMetadata
+using Compat
 
 export AbstractWorker, AnyValue, ArrayDecl, close!, init!, maybe_sharedarray, monitor, monitor!, worker, workerpid, getindex_t
 
@@ -16,7 +17,7 @@ via fields of an object `algorithm` which is a subtype of
 See `RegisterWorkerShell` for an overview of the API supported by
 `AbstractWorker` types.
 """
-abstract AbstractWorker
+@compat abstract type AbstractWorker end
 
 # Not sure about this next type...
 immutable ArrayDecl{A<:AbstractArray,N}
@@ -64,7 +65,7 @@ requested `AbstractArray` fields in `algorithm` will be turned into
 `SharedArray`s for `mon`. This reduces the cost of communication
 between the worker and driver processes.
 """
-function monitor{N}(algorithm::AbstractWorker, fields::Union{NTuple{N,Symbol},Vector{Symbol}}, morevars::Dict{Symbol,Any} = Dict{Symbol,Any}())
+function monitor{N}(algorithm::AbstractWorker, fields::Union{NTuple{N,Symbol},Vector{Symbol}}, morevars::Dict{Symbol} = Dict{Symbol,Any}())
     pid = workerpid(algorithm)
     mon = Dict{Symbol,Any}()
     for f in fields
@@ -77,7 +78,7 @@ function monitor{N}(algorithm::AbstractWorker, fields::Union{NTuple{N,Symbol},Ve
     mon
 end
 
-monitor{W<:AbstractWorker}(algorithm::Vector{W}, fields, morevars::Dict{Symbol,Any} = Dict{Symbol,Any}()) = map(alg->monitor(alg, fields, morevars), algorithm)
+monitor{W<:AbstractWorker}(algorithm::Vector{W}, fields, morevars::Dict{Symbol} = Dict{Symbol,Any}()) = map(alg->monitor(alg, fields, morevars), algorithm)
 
 """
 `monitor!(mon, algorithm)` updates `mon` with the current values of
@@ -91,7 +92,7 @@ One can check whether certain parameters are being request using
 `haskey(mon, :parameter)`. This might be wise if computation of
 `parameter` is non-essential and time consuming.
 """
-function monitor!(mon::Dict{Symbol,Any}, algorithm::AbstractWorker)
+function monitor!(mon::Dict{Symbol}, algorithm::AbstractWorker)
     for f in fieldnames(algorithm)
         monitor!(mon, f, getfield(algorithm, f))
     end
@@ -161,7 +162,7 @@ workerpid(w::AbstractWorker) = w.workerpid
 ## Utility functions
 function maybe_sharedarray(A::AbstractArray, pid::Int=myid())
     if pid != myid() && isbits(eltype(A))
-        S = SharedArray(eltype(A), size(A), pids=union(myid(), pid))
+        S = SharedArray{eltype(A)}(size(A), pids=union(myid(), pid))
         copy!(S, A)
     else
         S = A
@@ -171,9 +172,9 @@ end
 
 function maybe_sharedarray{T}(::Type{T}, sz::Dims, pid=myid())
     if isbits(T)
-        S = SharedArray(T, sz, pids=union(myid(), pid))
+        S = SharedArray{T}(sz, pids=union(myid(), pid))
     else
-        S = Array(T, sz)
+        S = Array{T}(sz)
     end
     S
 end

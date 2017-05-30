@@ -145,8 +145,8 @@ function worker(algorithm::AperturesMismatch, img, tindex, mon)
         correctbias!(mms)
     end
     Es = zeros(size(mms))
-    cs = Array(Any, size(mms))
-    Qs = Array(Any, size(mms))
+    cs = Array{Any}(size(mms))
+    Qs = Array{Any}(size(mms))
     thresh = algorithm.thresh
     for i = 1:length(mms)
         Es[i], cs[i], Qs[i] = qfit(mms[i], thresh; opt=false)
@@ -174,6 +174,6 @@ cudatype{T<:Union{Float32,Float64}}(::Type{T}) = T
 cudatype(::Any) = Float32
 
 myconvert{T}(::Type{Array{T}}, A::Array{T}) = A
-myconvert{T}(::Type{Array{T}}, A::AbstractArray) = copy!(Array(T, size(A)), A)
+myconvert{T}(::Type{Array{T}}, A::AbstractArray) = copy!(Array{T}(size(A)), A)
 
 end # module

@@ -67,9 +67,9 @@ function driver(outfile::AbstractString, algorithm::Vector, img, mon::Vector)
         fs = FormatSpec("0$(ndigits(n))d")  # group names of unpackable objects
         jldopen(outfile, "w") do file
             dsets = Dict{Symbol,Any}()
-            firstsave = SharedArray(Bool, 1)
+            firstsave = SharedArray{Bool}(1)
             firstsave[1] = true
-            have_unpackable = SharedArray(Bool, 1)
+            have_unpackable = SharedArray{Bool}(1)
             have_unpackable[1] = false
             # Run the jobs
             nextidx = 0
@@ -105,10 +105,10 @@ function driver(outfile::AbstractString, algorithm::Vector, img, mon::Vector)
                                         dsets[k][idx] = v
                                         continue
                                     elseif isa(v, Array) || isa(v, SharedArray)
-                                        v = nicehdf5(v)
-                                        if eltype(v) <: HDF5.HDF5BitsKind
-                                            colons = [Colon() for i = 1:ndims(v)]
-                                            dsets[k][colons..., idx] = v
+                                        vw = nicehdf5(v)
+                                        if eltype(vw) <: HDF5.HDF5BitsKind
+                                            colons = [Colon() for i = 1:ndims(vw)]
+                                            dsets[k][colons..., idx] = vw
                                             continue
                                         end
                                     end
@@ -157,7 +157,7 @@ function initialize_jld!(dsets, file, mon, fs, n)
     for (k,v) in mon
         kstr = string(k)
         if isa(v, Number)
-            write(file, kstr, Array(typeof(v), n))
+            write(file, kstr, Vector{typeof(v)}(n))
             dsets[k] = file[kstr]
         elseif isa(v, Array) || isa(v, SharedArray)
             v = nicehdf5(v)
@@ -165,7 +165,7 @@ function initialize_jld!(dsets, file, mon, fs, n)
                 fullsz = (size(v)..., n)
                 dsets[k] = d_create(file.plain, kstr, datatype(eltype(v)), dataspace(fullsz))
             else
-                write(file, kstr, Array(eltype(v), size(v)..., n))  # might fail if it's too big, but we tried
+                write(file, kstr, Array{eltype(v)}(size(v)..., n))  # might fail if it's too big, but we tried
             end
             dsets[k] = file[kstr]
         elseif isa(v, ArrayDecl)  # maybe this never happens?
@@ -243,7 +243,7 @@ end
 function sqrt_subtract_bias(A, bias)
 #    T = typeof(sqrt(one(promote_type(eltype(A), typeof(bias)))))
     T = Float32
-    out = Array(T, size(A))
+    out = Array{T}(size(A))
     for I in eachindex(A)
         @inbounds out[I] = sqrt(max(zero(T), convert(T, A[I]) - bias))
     end
