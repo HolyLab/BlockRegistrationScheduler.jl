@@ -18,4 +18,9 @@ addons:
 script:
   - if [[ -a .git/shallow ]]; then git fetch --unshallow; fi
   - julia -e 'Pkg.clone(pwd()); Pkg.build("BlockRegistrationScheduler")'
-  - julia -e 'Pkg.test("BlockRegistrationScheduler")'
+  # Don't use Pkg.test because we want inlining to be on
+  # We can go back to using Pkg.test once 0.6 is the minimum version
+#  - julia -e 'Pkg.test("BlockRegistrationScheduler")'
+  # Because we circumvent Pkg.test, we have to install test dependencies manually
+  - julia -e 'cd(Pkg.dir("BlockRegistrationScheduler","test")); if isfile("REQUIRE") reqs = readlines("REQUIRE"); for r in reqs Pkg.add(chomp(r)) end; end'
+  - julia -e 'cd(Pkg.dir("BlockRegistrationScheduler","test")); include("runtests.jl")'
