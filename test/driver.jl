@@ -21,7 +21,7 @@ pop!(LOAD_PATH)
 workdir = tempname()
 mkdir(workdir)
 
-img = AxisArray(SharedArray(Float32, (100,100,7)), :y, :x, :time)
+img = AxisArray(SharedArray{Float32}((100,100,7)), :y, :x, :time)
 
 # Single-process tests
 # Simple operation & passing back scalars
@@ -60,8 +60,8 @@ rm(fn)
 
 # Multi-process
 nw = length(driverprocs)
-alg = Array(Any, nw)
-mon = Array(Any, nw)
+alg = Vector{Any}(nw)
+mon = Vector{Any}(nw)
 for i = 1:nw
     alg[i] = Alg2(rand(100,100), Float32, (3,3), pid=driverprocs[i])
     mon[i] = monitor(alg[i], (:tform,:u0,:workerpid))

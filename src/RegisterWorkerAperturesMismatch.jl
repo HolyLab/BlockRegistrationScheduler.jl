@@ -2,7 +2,7 @@ __precompile__()
 
 module RegisterWorkerAperturesMismatch
 
-using Images, AffineTransforms, Interpolations, FixedSizeArrays
+using Images, AffineTransforms, Interpolations, StaticArrays
 using RegisterCore, RegisterDeformation, RegisterFit, RegisterPenalty, RegisterOptimize
 # Note: RegisterMismatch/RegisterMismatchCuda is selected below
 using RegisterWorkerShell, RegisterDriver
@@ -115,8 +115,8 @@ function AperturesMismatch{K,N}(fixed, knots::NTuple{N,K}, maxshift, preprocess=
     T = eltype(fixed) <: AbstractFloat ? eltype(fixed) : Float32
     # T = Float64   # Ipopt requires Float64
     Es = ArrayDecl(Array{T,N}, gridsize)
-    cs = ArrayDecl(Array{Vec{N,T},N}, gridsize)
-    Qs = ArrayDecl(Array{Mat{N,N,T},N}, gridsize)
+    cs = ArrayDecl(Array{SVector{N,T},N}, gridsize)
+    Qs = ArrayDecl(Array{similar_type(SMatrix, T, Size(N,N)),N}, gridsize)
     mmsize = map(x->2x+1, maxshift)
     mmis = ArrayDecl(Array{NumDenom{T},2*N}, (mmsize...,gridsize...))
     AperturesMismatch{typeof(fixed),T,K,N}(fixed, knots, maxshift, T(thresh), preprocess, normalization, correctbias, Es, cs, Qs, mmis, pid, dev, Dict{Symbol,Any}())
@@ -145,8 +145,8 @@ function worker(algorithm::AperturesMismatch, img, tindex, mon)
         correctbias!(mms)
     end
     Es = zeros(size(mms))
-    cs = Array(Any, size(mms))
-    Qs = Array(Any, size(mms))
+    cs = Array{Any}(size(mms))
+    Qs = Array{Any}(size(mms))
     thresh = algorithm.thresh
     for i = 1:length(mms)
         Es[i], cs[i], Qs[i] = qfit(mms[i], thresh; opt=false)
@@ -174,6 +174,6 @@ cudatype{T<:Union{Float32,Float64}}(::Type{T}) = T
 cudatype(::Any) = Float32
 
 myconvert{T}(::Type{Array{T}}, A::Array{T}) = A
-myconvert{T}(::Type{Array{T}}, A::AbstractArray) = copy!(Array(T, size(A)), A)
+myconvert{T}(::Type{Array{T}}, A::AbstractArray) = copy!(Array{T}(size(A)), A)
 
 end # module

@@ -132,7 +132,7 @@ function Apertures{K,N}(fixed, knots::NTuple{N,K}, maxshift, λrange, preprocess
     overlap_t = (overlap...) #Make tuple
     length(overlap) == N || throw(DimensionMismatch("overlap must have $N entries"))
     nimages(fixed) == 1 || error("Register to a single image")
-    isa(λrange, Number) || isa(λrange, NTuple{2}) || error("λrange must be a number or 2-tuple")
+    isa(λrange, Number) || isa(λrange, Tuple{Number,Number}) || error("λrange must be a number or 2-tuple")
     if thresh == nothing
         thresh = (thresh_fac/prod(gridsize)) * (normalization==:pixels ? length(fixed) : sumabs2(fixed))
     end
@@ -169,8 +169,8 @@ function worker(algorithm::Apertures, img, tindex, mon)
         correctbias!(mms)
     end
     E0 = zeros(size(mms))
-    cs = Array(Any, size(mms))
-    Qs = Array(Any, size(mms))
+    cs = Array{Any}(size(mms))
+    Qs = Array{Any}(size(mms))
     thresh = algorithm.thresh
     for i = 1:length(mms)
         E0[i], cs[i], Qs[i] = qfit(mms[i], thresh; opt=false)
@@ -203,6 +203,6 @@ cudatype{T<:Union{Float32,Float64}}(::Type{T}) = T
 cudatype(::Any) = Float32
 
 myconvert{T}(::Type{Array{T}}, A::Array{T}) = A
-myconvert{T}(::Type{Array{T}}, A::AbstractArray) = copy!(Array(T, size(A)), A)
+myconvert{T}(::Type{Array{T}}, A::AbstractArray) = copy!(Array{T}(size(A)), A)
 
 end # module

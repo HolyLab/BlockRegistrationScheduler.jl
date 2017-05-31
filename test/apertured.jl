@@ -1,14 +1,14 @@
 aperturedprocs = addprocs(2)
 # aperturedprocs = [myid()]
 
-using Images, TestImages, FixedSizeArrays
+using Images, TestImages, StaticArrays
 using BlockRegistration, RegisterDeformation, RegisterCore
 using BlockRegistrationScheduler, RegisterDriver, RegisterWorkerApertures
 
 # Work around julia #3674
 @sync for p in aperturedprocs
     @spawnat p eval(quote
-        using Images, TestImages, FixedSizeArrays
+        using Images, TestImages, StaticArrays
         using BlockRegistration, RegisterDeformation
         using BlockRegistrationScheduler, RegisterDriver, RegisterWorkerApertures
     end)
@@ -21,7 +21,7 @@ fixed = testimage("cameraman")
 gridsize = (5,5)
 shift_amplitude = 5
 u_dfm = shift_amplitude*randn(2, gridsize..., 4)
-img = AxisArray(SharedArray(Float64, (size(fixed)..., 4), pids = union(myid(), aperturedprocs)), :y, :x, :time)
+img = AxisArray(SharedArray{Float64}((size(fixed)..., 4), pids = union(myid(), aperturedprocs)), :y, :x, :time)
 tax = timeaxis(img)
 knots = map(d->linspace(1,size(fixed,d),gridsize[d]), (1,2))
 for i = 1:4
@@ -34,8 +34,8 @@ maxshift = (3*shift_amplitude, 3*shift_amplitude)
 algorithms = Apertures[Apertures(fixed, knots, maxshift, 0.001; pid=p) for p in aperturedprocs]
 mons = monitor(algorithms,
                (),
-               Dict(:u => Array(Vec{2,Float64}, gridsize),
-                    :warped => Array(Float64, size(fixed)),
+               Dict(:u => Array{SVector{2,Float64}}(gridsize),
+                    :warped => Array{Float64}(size(fixed)),
                     :mismatch => 0.0))
 driver(fn, algorithms, img, mons)
 
@@ -45,9 +45,9 @@ pp = PreprocessSNF(0.1, [2,2], [10,10])
 algorithms = Apertures[Apertures(pp(fixed), knots, maxshift, 0.001, pp; pid=p) for p in aperturedprocs]
 mons = monitor(algorithms,
                (),
-               Dict(:u => Array(Vec{2,Float64}, gridsize),
-                    :warped => Array(Float64, size(fixed)),
-                    :warped0 => Array(Float64, size(fixed)),
+               Dict(:u => Array{SVector{2,Float64}}(gridsize),
+                    :warped => Array{Float64}(size(fixed)),
+                    :warped0 => Array{Float64}(size(fixed)),
                     :mismatch => 0.0))
 driver(fn_pp, algorithms, img, mons)
 
@@ -66,8 +66,8 @@ maxshift = (3*shift_amplitude, 3*shift_amplitude)
 algorithms = Apertures[Apertures(fixed, knots, maxshift, 0.001; pid=p) for p in aperturedprocs]
 mons = monitor(algorithms,
                (),
-               Dict(:u => Array(Vec{2,Float64}, gridsize),
-                    :warped => Array(Float64, size(fixed)),
+               Dict(:u => Array{SVector{2,Float64}}(gridsize),
+                    :warped => Array{Float64}(size(fixed)),
                     :mismatch => 0.0))
 driver(fnt, algorithms, imgt, mons)
 
@@ -80,7 +80,7 @@ using JLD, RegisterCore, RegisterMismatch
 jldopen(fnt) do f
     mm = read(f["mismatch"])
     u = read(f["u"])
-    @test maxabs(u+u_dfmt) < 0.5
+    @test maximum(abs, u+u_dfmt) < 0.5
     warped = read(f["warped"])
     for i = 1:nimages(img)
         r0 = ratio(mismatch0(fixed, imgt[tax(i)]),0)

@@ -1,14 +1,14 @@
 aperturedprocs = addprocs(2)
 # aperturedprocs = [myid()]
 
-using Images, TestImages, FixedSizeArrays
+using Images, TestImages, StaticArrays
 using BlockRegistration, RegisterDeformation, RegisterCore, RegisterOptimize
 using BlockRegistrationScheduler, RegisterDriver, RegisterWorkerAperturesMismatch
 
 # Work around julia #3674
 @sync for p in aperturedprocs
     @spawnat p eval(quote
-        using Images, TestImages, FixedSizeArrays
+        using Images, TestImages, StaticArrays
         using BlockRegistration, RegisterDeformation
         using BlockRegistrationScheduler, RegisterDriver, RegisterWorkerAperturesMismatch
     end)
@@ -24,7 +24,7 @@ gridsize = (5,5)
 ntimes = 4
 shift_amplitude = 5
 u_dfm = shift_amplitude*randn(2, gridsize..., ntimes)
-img = AxisArray(SharedArray(Float64, (size(fixed)..., ntimes), pids = union(myid(), aperturedprocs)), :y, :x, :time)
+img = AxisArray(SharedArray{Float64}((size(fixed)..., ntimes), pids = union(myid(), aperturedprocs)), :y, :x, :time)
 knots = map(d->linspace(1,size(fixed,d),gridsize[d]), (1,2))
 tax = timeaxis(img)
 for i = 1:ntimes

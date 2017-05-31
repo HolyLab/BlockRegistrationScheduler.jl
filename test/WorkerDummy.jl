@@ -3,13 +3,14 @@ module WorkerDummy
 
 using RegisterWorkerShell
 import RegisterWorkerShell: worker
+using Compat
 
 export Alg1, Alg2, Alg3
 
 # Dispatch on the algorithm used to perform registration
 # Each algorithm has a container it uses for storage and communication
 # with the driver process
-abstract Alg <: AbstractWorker
+@compat abstract type Alg <: AbstractWorker end
 
 type Alg1{A<:AbstractArray} <: Alg
     fixed::A

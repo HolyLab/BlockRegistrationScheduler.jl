@@ -33,7 +33,7 @@ function Rigid(fixed; thresh_fac=(0.5)^ndims(fixed), thresh=nothing, SD = eye(nd
         na = convert(T,NaN)
         fixedpa = (fill(na, ndims(fixed)), fill(na, ndims(fixed), ndims(fixed)))
     end
-    cthresh = thresh == nothing ? thresh_fac*sumabs2(fixed) : thresh
+    cthresh = thresh == nothing ? thresh_fac*sum(abs2, fixed) : thresh
     params = Dict{Symbol,Any}(kwargs)
     Rigid{typeof(fixed),T}(fixed, convert(T, cthresh), fixedpa, SDm, pat, params, pid)
 end

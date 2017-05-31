@@ -2,7 +2,7 @@ __precompile__()
 
 module RegisterDriver
 
-using Images, JLD, HDF5, FixedSizeArrays, Formatting
+using Images, JLD, HDF5, StaticArrays, Formatting
 using RegisterCore
 using RegisterWorkerShell
 
@@ -67,9 +67,9 @@ function driver(outfile::AbstractString, algorithm::Vector, img, mon::Vector)
         fs = FormatSpec("0$(ndigits(n))d")  # group names of unpackable objects
         jldopen(outfile, "w") do file
             dsets = Dict{Symbol,Any}()
-            firstsave = SharedArray(Bool, 1)
+            firstsave = SharedArray{Bool}(1)
             firstsave[1] = true
-            have_unpackable = SharedArray(Bool, 1)
+            have_unpackable = SharedArray{Bool}(1)
             have_unpackable[1] = false
             # Run the jobs
             nextidx = 0
@@ -81,8 +81,10 @@ function driver(outfile::AbstractString, algorithm::Vector, img, mon::Vector)
                     @async begin
                         while (idx = getnextidx()) <= n
                             if use_workerprocs
-                                remotecall(println, workerpid(alg), "Worker ", workerpid(alg), " is working on ", idx)
-                                mon[i] = remotecall_fetch(worker, workerpid(alg), rralgorithm[i], img, idx, mon[i])
+                                remotecall_fetch(println, workerpid(alg), "Worker ", workerpid(alg), " is working on ", idx)
+                                # See https://github.com/JuliaLang/julia/issues/22139
+                                tmp = remotecall_fetch(worker, workerpid(alg), rralgorithm[i], img, idx, mon[i])
+                                copy_all_but_shared!(mon[i], tmp)
                             else
                                 println("Working on ", idx)
                                 mon[1] = worker(algorithm[1], img, idx, mon[1])
@@ -103,10 +105,10 @@ function driver(outfile::AbstractString, algorithm::Vector, img, mon::Vector)
                                         dsets[k][idx] = v
                                         continue
                                     elseif isa(v, Array) || isa(v, SharedArray)
-                                        v = nicehdf5(v)
-                                        if eltype(v) <: HDF5.HDF5BitsKind
-                                            colons = [Colon() for i = 1:ndims(v)]
-                                            dsets[k][colons..., idx] = v
+                                        vw = nicehdf5(v)
+                                        if eltype(vw) <: HDF5.HDF5BitsKind
+                                            colons = [Colon() for i = 1:ndims(vw)]
+                                            dsets[k][colons..., idx] = vw
                                             continue
                                         end
                                     end
@@ -155,7 +157,7 @@ function initialize_jld!(dsets, file, mon, fs, n)
     for (k,v) in mon
         kstr = string(k)
         if isa(v, Number)
-            write(file, kstr, Array(typeof(v), n))
+            write(file, kstr, Vector{typeof(v)}(n))
             dsets[k] = file[kstr]
         elseif isa(v, Array) || isa(v, SharedArray)
             v = nicehdf5(v)
@@ -163,7 +165,7 @@ function initialize_jld!(dsets, file, mon, fs, n)
                 fullsz = (size(v)..., n)
                 dsets[k] = d_create(file.plain, kstr, datatype(eltype(v)), dataspace(fullsz))
             else
-                write(file, kstr, Array(eltype(v), size(v)..., n))  # might fail if it's too big, but we tried
+                write(file, kstr, Array{eltype(v)}(size(v)..., n))  # might fail if it's too big, but we tried
             end
             dsets[k] = file[kstr]
         elseif isa(v, ArrayDecl)  # maybe this never happens?
@@ -181,7 +183,7 @@ function initialize_jld!(dsets, file, mon, fs, n)
     have_unpackable
 end
 
-function nicehdf5{T<:FixedArray}(v::Union{Array{T},SharedArray{T}})
+function nicehdf5{T<:StaticArray}(v::Union{Array{T},SharedArray{T}})
     nicehdf5(reinterpret(eltype(T), sdata(v), (size(eltype(v))..., size(v)...)))
 end
 
@@ -192,6 +194,14 @@ end
 nicehdf5(v::SharedArray) = sdata(v)
 nicehdf5(v) = v
 
+function copy_all_but_shared!(dest, src)
+    for (k, v) in src
+        if !isa(v, SharedArray)
+            dest[k] = v
+        end
+    end
+    dest
+end
 
 """
 `pp = PreprocessSNF(bias, sigmalp, sigmahp)` constructs an object that
@@ -219,7 +229,7 @@ end
 
 function preprocess(pp::PreprocessSNF, A::AbstractArray)
     Af = sqrt_subtract_bias(A, pp.bias)
-    imfilter(highpass(Af, pp.sigmahp), KernelFactors.IIRGaussian((pp.sigmalp...)))
+    imfilter(highpass(Af, pp.sigmahp), KernelFactors.IIRGaussian((pp.sigmalp...)), NA())
 end
 (pp::PreprocessSNF)(A::AbstractArray) = preprocess(pp, A)
 (pp::PreprocessSNF)(A::ImageMeta) = shareproperties(A, pp(data(A)))
@@ -233,7 +243,7 @@ end
 function sqrt_subtract_bias(A, bias)
 #    T = typeof(sqrt(one(promote_type(eltype(A), typeof(bias)))))
     T = Float32
-    out = Array(T, size(A))
+    out = Array{T}(size(A))
     for I in eachindex(A)
         @inbounds out[I] = sqrt(max(zero(T), convert(T, A[I]) - bias))
     end
