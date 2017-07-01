@@ -8,7 +8,12 @@ This package implements various algorithms for image registration. The algorithm
 
 These workers are executed by the `driver` function found in
 `RegisterDriver`, which schedules jobs for workers running in separate
-processes.
+processes. Having multiple workers can speed processing of large
+images.
+
+If your images are not large, you may find it easier to use
+[BlockRegistration](https://github.com/HolyLab/BlockRegistration) directly.
+
 
 ## Usage
 
@@ -36,9 +41,14 @@ more about what each of these functions does from the help (e.g.,
 ## Stack-by-stack registration example
 
 ```jl
+# If your images are big (tens/hundreds of gigabytes or more), start up
+# some worker processes to speed things up
 wpids = addprocs(8)  # use 8 worker processes (no CUDA)
+# Alternatively if your images aren't big, it's much easier to use wpids = [1]
+# because this runs everything in the main process, and any error messages
+# are easier to interpret.
 
-using Images, Unitful, FixedSizeArrays, JLD, MAT, AxisArrays
+using Images, Unitful, StaticArrays, JLD, MAT, AxisArrays
 using BlockRegistration, BlockRegistrationScheduler
 using RegisterWorkerApertures
 
@@ -54,30 +64,47 @@ fn = "exp1_20150814.imagine"
 #   The mode="r" is needed if you don't have write permission to the
 #   file, or don't want to risk accidents
 img0 = load(fn, mode="r")
-# Snip out a region of interest (discard empty portions of the image stack)
+# Note: if you're loading from a file type that doesn't return an AxisArray,
+# add something like this:
+#    img0 = AxisArray(img0, (:y, :x, :time), (Δy, Δx, Δt))  # for a 2d image + time
+# where Δy, Δx is the pixel spacing along y and x, respectively, and
+# Δt the time between successive frames. (The latter isn't really used for anything.)
+
+# Optionally snip out a region of interest (discard empty portions of the image stack).
+# If you instead want to use the whole image, set img=img0 and skip the next two lines
 roi = (751:950, 821:1045, 12:28)
 img = view(img0, roi..., :)  # you could alternatively select a subset of times
+# Pick one particular image to serve as the reference image.
+# fixedidx records the index of the reference (fixed) image
+fixedidx = (nimages(img)+1) ÷ 2  # ÷ can be obtained with "\div[TAB]"
 # Select our "fixed" image
-fixedidx = (nimages(img)+1) >> 1
 fixed0 = view(img, timeaxis(img)(fixedidx))
 
 # Important: you should manually inspect fixed0 to make sure there are
 # no anomalies. Do not proceed to the next step until you have done this.
 
-# Make sure the pixelspacing property is set correctly; edit the .imagine
-# file with a text editor if necessary.
-ps = pixelspacing(img)
-# Define preprocessing. Here we'll highpass filter over 25μm, but these
-# numbers are likely to be image-dependent.
-σ = 25μm
-sigmahp = Float64[σ/x for x in ps]
-sigmalp = [0,0,0]  # lowpass filtering is not currently recommended
+## This next block is necessary only if you want highpass filtering,
+## e.g., to get rid of some background. If you don't need this, set
+##   fixed = fixed0
+## and skip ahead to the part setting the grid.
 
-# The pco cameras have a bias of 100 in "digital number"
-# units. Convert this into the units of the image intensity
-bias = reinterpret(eltype(img0), UInt16(100))
-pp = PreprocessSNF(bias, sigmalp, sigmahp)
-fixed = pp(fixed0)
+  # Make sure the pixelspacing property is set correctly; edit the .imagine
+  # file with a text editor if necessary or use the AxisArray as above.
+  ps = pixelspacing(img)
+  # Define preprocessing. Here we'll highpass filter over 25μm, but these
+  # numbers are likely to be image-dependent.
+  σ = 25μm
+  sigmahp = Float64[σ/x for x in ps]
+  sigmalp = [0,0,0]  # lowpass filtering is not currently recommended
+  # The pco cameras have a bias of 100 in "digital number"
+  # units. Convert this into the units of the image intensity.
+  # If you're using a different camera, or using a PMT, this won't apply to you.
+  # If you don't know anything better, you can set
+  #     bias = zero(eltype(img0))
+  bias = reinterpret(eltype(img0), UInt16(100))
+  pp = PreprocessSNF(bias, sigmalp, sigmahp)
+  fixed = pp(fixed0)
+  # End of highpass filtering block
 
 # Set up the grid of apertures for aligning the images. You should use
 # a grid that is fine enough to capture the regional differences, but
@@ -127,7 +154,7 @@ jldopen(fileout, "r+") do io
 end
 ```
 
-To warp the images:
+Once this is done, to warp the images:
 ```jl
 # Read the image data and deformation
 using Images, ImagineFormat, FileIO
@@ -153,13 +180,13 @@ ImagineFormat.save_header(string(basename, ".imagine"), fn, img, Float32)
 ## Whole-experiment optimization example
 
 For calcium imaging data, an alternative worker is
-`RegisterWorkerAperturesMismatch`. Here is a complete example of how
-one might use it:
+`RegisterWorkerAperturesMismatch`. Here is a fairly complete example of how
+one might use it (but see above for more detail about some of the steps):
 
 ```jl
-wpids = addprocs(3)   # launch 3 worker processes
+wpids = addprocs(3)   # launch 3 worker processes, and we'll use CUDA this time
 
-using Images, Unitful, FixedSizeArrays, CUDArt, JLD, AxisArrays
+using Images, Unitful, StaticArrays, CUDArt, JLD, AxisArrays
 using BlockRegistration, BlockRegistrationScheduler
 using RegisterWorkerAperturesMismatch
 
@@ -179,7 +206,7 @@ img0 = load(fn, mode="r")
 roi = (351:1120, :, :)
 img = view(img0, roi..., :)
 # Select our "fixed" image
-fixedidx = (nimages(img)+1) >> 1
+fixedidx = (nimages(img)+1) ÷ 2
 fixed0 = img[timeaxis(img)(fixedidx)]
 
 # Important: you should manually inspect fixed0 to make sure there are
