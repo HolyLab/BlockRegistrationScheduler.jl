@@ -135,7 +135,12 @@ algorithm = Apertures[Apertures(fixed, knots, mxshift, λ, pp; pid=wpids[i], cor
 # apertureoverlap = 0.2;  # Aperture overlap ratio (e.g. 0.2 (20%)); 0 generally works fine
 # aperture_width = default_aperture_width(fixed, gridsize) # Obtain the default aperture width.
 # overlap_t = map(x->round(Int64,x*apertureoverlap), aperture_width)
-mon = monitor(algorithm, (), Dict{Symbol,Any}(:u=>ArrayDecl(Array{Vec{3,Float64},3}, gridsize)))
+# `u` is an array of displacements, which we encode as `SVector`s from the StaticArrays package.
+# Since this example is 3-dimensional, these displacements are `SVector{3,T}` where `T` is a number type like Float64.
+# Moreover, `u` is a 3d array of these displacements, because the grid is a 3d grid. So if `V = SVector{3,Float64}` is
+# the type of our displacements, then `u` is an `Array{V,3}`.
+# If you're working in 2d, then change these 3s to 2s.
+mon = monitor(algorithm, (), Dict{Symbol,Any}(:u=>ArrayDecl(Array{SVector{3,Float64},3}, gridsize)))
 
 # Define the output file and run the job
 basename = splitext(splitdir(fn)[2])[1]
