@@ -293,3 +293,45 @@ end
 At the conclusion of this script's execution, `fileout` will have been
 written. You use this as the input to the optimization phase of
 registration; see the README for BlockRegistration.
+
+
+## Registration tricks
+(by Jerry)
+Here, I would like to share my experience. Briefly, I sample images at a few time points, preprocess them, and obtain deformation vectors through registration. Then, the vectors are interpolated across time and applied to the original image. By the way, do not expect a perfect registration, but aim to obtain analyzable data.
+
+I obtained a volumetric timelapse image (x, y, z, time) using OCPI1 in Holy Lab.
+The below are some properties of my image:
+- The object is an ex vivo neuronal tissue expressing a calcium indicator (thus, intensity fluctuates over time). 
+- The voxel size is 0.577 by 0.5770 by 5 micrometer.
+- The size of image is 1120 x 1080 x 60 pixels.
+- One stack per 2 seconds (, and I often acquire more than 2000 stacks; occasionally more than 5000 stacks).
+- More non-linear, regional movement (warping) than translational movement.
+- Warping is neither rapid nor drastic. For example, two images at time = 0 and at time = 3 min are fairly identical.
+- Without neuronal activity, signal-noise ratio was low (Camera bias is 100. Pixel intensity in tissue region is about 120~130.).
+
+Preprocessing: If image moves rapidly, the first two might not be a good option.
+1. Choose good images for registration:
+I selected images that do not show evoked calcium activity. There are still spontaneous activity.
+
+2. Median or quantile filtering across time:
+This is to reduce noise and spontaneous activity.
+
+3. Replace too high intensity pixels with NaN.
+Sometimes, I observed high-intensity objects moving around tissue surface. While these things could be biologically important features, this is disastrous for registration. I ended up with replacing high intensity object (or pixels) with NaN. 
+
+4. Run test registration.
+I first registered a few sample image stacks, adjusting parameters. There might be good starting parameter values. With the size of my image and the degree of warping, I initially chose parameters below:
+`maxshift = (30, 30, 3)`  # This corresponds to (17.3 micrometer x 17.3 micrometer, 15micrometer). This depends on degree of warping in your image.
+`gridsize = (15, 15, 8)` or `gridsize = (24,24,12)` # Again, my image size is 1120 X 1080 X 60
+`bias = 100`
+`correctbias = false` 
+`ps = [0.5770, 0.5770, 5]` # pixel spacing
+`sigma = 20 (micrometer)` # either 20 or 25 seems work fine.
+`sigmahp = Float64[sigma/x for x in ps]` #Highpass filter
+`sigmalp = [3, 3, 0]` #Lowpass filter
+`lambda =1e-4`
+
+In warping step, 
+`phi_s = medfilt(griddeformations(u, knots), 1)` #Basically there is no filtering.
+
+5. Interpolate phi_s and register the entire data set.
