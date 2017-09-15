@@ -299,7 +299,7 @@ registration; see the README for BlockRegistration.
 (by Jerry)
 Here, I would like to share my experience. Briefly, I sample images at a few time points, preprocess them, and obtain deformation vectors through registration. Then, the vectors are interpolated across time and applied to the original image. By the way, do not expect a perfect registration, but aim to obtain analyzable data.
 
-I obtained a volumetric timelapse image (x, y, z, time) using OCPI1 in Holy Lab.
+I acquired a volumetric timelapse image (x, y, z, time) using OCPI1 in Holy Lab.
 The below are some properties of my image:
 - The object is an ex vivo neuronal tissue expressing a calcium indicator (thus, intensity fluctuates over time). 
 - The voxel size is 0.577 by 0.5770 by 5 micrometer.
