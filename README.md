@@ -309,17 +309,17 @@ The below are some properties of my image:
 - Warping is neither rapid nor drastic. For example, two images at time = 0 and at time = 3 min are fairly identical.
 - Without neuronal activity, signal-noise ratio was low (Camera bias is 100. Pixel intensity in tissue region is about 120~130.).
 
-Preprocessing: If image moves rapidly, the first two might not be a good option.
+If image moves rapidly, the first two below might not be a good option.
 1. Choose good images for registration:
 I selected images that do not show evoked calcium activity. There are still spontaneous activity.
 
 2. Median or quantile filtering across time:
 This is to reduce noise and spontaneous activity.
 
-3. Replace too high intensity pixels with NaN.
+3. Replace too high intensity pixels with NaN:
 Sometimes, I observed high-intensity objects moving around tissue surface. While these things could be biologically important features, this is disastrous for registration. I ended up with replacing high intensity object (or pixels) with NaN. 
 
-4. Run test registration.
+4. Run test registration:
 I first registered a few sample image stacks, adjusting parameters. There might be good starting parameter values. The below are the parameters that I frequently play around. With the size of my image and the degree of warping, I initially chose parameters below:
 ```jl
 maxshift = (30, 30, 3)  # This corresponds to (17.3 micrometer x 17.3 micrometer, 15micrometer). This depends on degree of warping in your image.
@@ -335,4 +335,5 @@ sigmalp = [3, 3, 0] #Lowpass filter
 In warping step, 
 `ϕ_s = medfilt(griddeformations(u, knots), 1)` #Basically there is no filtering.
 ```
-5. Once your image samples give a good results, interpolate `ϕ_s` using `tinterpolate`. Finally, warp the entire data set.
+
+The steps above aim to register only a few selected images. If that give a good result, interpolate the deformation vector `ϕ_s` using `tinterpolate`. Finally, apply the interpolated ϕ_s to warp entire dataset.
