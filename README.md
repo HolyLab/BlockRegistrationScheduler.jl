@@ -320,18 +320,19 @@ This is to reduce noise and spontaneous activity.
 Sometimes, I observed high-intensity objects moving around tissue surface. While these things could be biologically important features, this is disastrous for registration. I ended up with replacing high intensity object (or pixels) with NaN. 
 
 4. Run test registration.
-I first registered a few sample image stacks, adjusting parameters. There might be good starting parameter values. With the size of my image and the degree of warping, I initially chose parameters below:
-`maxshift = (30, 30, 3)`  # This corresponds to (17.3 micrometer x 17.3 micrometer, 15micrometer). This depends on degree of warping in your image.
-`gridsize = (15, 15, 8)` or `gridsize = (24,24,12)` # Again, my image size is 1120 X 1080 X 60
-`bias = 100`
-`correctbias = false` 
-`ps = [0.5770, 0.5770, 5]` # pixel spacing
-`sigma = 20 (micrometer)` # either 20 or 25 seems work fine.
-`sigmahp = Float64[sigma/x for x in ps]` #Highpass filter
-`sigmalp = [3, 3, 0]` #Lowpass filter
-`lambda =1e-4`
+I first registered a few sample image stacks, adjusting parameters. There might be good starting parameter values. The below are the parameters that I frequently play around. With the size of my image and the degree of warping, I initially chose parameters below:
+```jl
+maxshift = (30, 30, 3)  # This corresponds to (17.3 micrometer x 17.3 micrometer, 15micrometer). This depends on degree of warping in your image.
+gridsize = (15, 15, 8) # or gridsize = (24,24,12) # Again, my image size is 1120 X 1080 X 60
+bias = 100
+correctbias = false # a parameter used in Algorithm
+ps = [0.5770, 0.5770, 5] # pixel spacing
+sigma = 20 μm # either 20 or 25  seems work fine.
+sigmahp = Float64[sigma/x for x in ps] #Highpass filter
+sigmalp = [3, 3, 0] #Lowpass filter
+λ = 1e-4 
 
 In warping step, 
-`phi_s = medfilt(griddeformations(u, knots), 1)` #Basically there is no filtering.
-
-5. Interpolate phi_s and register the entire data set.
+`ϕ_s = medfilt(griddeformations(u, knots), 1)` #Basically there is no filtering.
+```
+5. Once your image samples give a good results, interpolate `ϕ_s` using `tinterpolate`. Finally, warp the entire data set.
