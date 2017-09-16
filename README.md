@@ -371,7 +371,7 @@ img0 = load("exp1_med.imagine")
 highThresh(Float32, "exp1_thresh.cam", img0, 140; bias = NaN) #in Jerry_RegisterUtils; See `?highThresh`
 ImagineFormat.save_header("exp1_thresh.imagine", fn, img0, Float32)
 
-#### Load image for test registration; This preprocessed image will be used for getting deformation vectors. However, the original image will use deformation vectors and be warped.
+#### Load image for registration; The image is preprocessed image. It will be used for getting deformation vectors. However, the original image will use deformation vectors and be warped.
 img0 = load("exp1_thresh.imagine")
 
 #### 4. Select test registration stacks
