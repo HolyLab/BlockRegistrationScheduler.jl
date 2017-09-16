@@ -322,18 +322,123 @@ Sometimes, I observed high-intensity objects moving around tissue surface. While
 4. Run test registration:
 I first registered a few sample image stacks, adjusting parameters. There might be good starting parameter values. The below are the parameters that I frequently play around. With the size of my image and the degree of warping, I initially chose parameters below:
 ```jl
-maxshift = (30, 30, 3)  # This corresponds to (17.3 micrometer x 17.3 micrometer, 15micrometer). This depends on degree of warping in your image.
-gridsize = (15, 15, 8) # or gridsize = (24,24,12) # Again, my image size is 1120 X 1080 X 60
+#### Parameters for fixed image.
 bias = 100
-correctbias = false # a parameter used in Algorithm
 ps = [0.5770, 0.5770, 5] # pixel spacing
 sigma = 20 μm # either 20 or 25  seems work fine.
 sigmahp = Float64[sigma/x for x in ps] #Highpass filter
 sigmalp = [3, 3, 0] #Lowpass filter
-λ = 1e-4 
 
-In warping step, 
-`ϕ_s = medfilt(griddeformations(u, knots), 1)` #Basically there is no filtering.
+#### Parameters for algorithm structure
+maxshift = (30, 30, 3)  # This corresponds to (17.3 micrometer x 17.3 micrometer, 15micrometer). This depends on degree of warping in your image.
+gridsize = (15, 15, 8) # or gridsize = (24,24,12) # Again, my image size is 1120 X 1080 X 60. Both gridsizes gave fairly good results, but I prefer larger grid size.
+λ = 1e-4 
+algorithm = Apertures[Apertures(fixed, knots, mxshift, λ, pp; pid=wpids[i], correctbias=false) for i = 1:length(wpids)] #Notice that correctbias = false 
+
+#### In warping step, 
+ϕ_s = medfilt(griddeformations(u, knots), 1) #Basically there is no filtering. Notice the input parameter is 1.
 ```
 
 The steps above aim to register only a few selected images. If that give a good result, interpolate the deformation vector `ϕ_s` using `tinterpolate`. Finally, apply the interpolated ϕ_s to warp entire dataset.
+
+Example script: by the way, I included one of my own modules.
+```jl
+wpids = addprocs(6)
+using BlockRegistration, BlockRegistrationScheduler
+using RegisterWorkerApertures
+using Images, ImageView
+using Unitful, StaticArrays, AxisArrays, JLD
+using Jerry_RegisterUtils #This module is in `LabShare` repository
+
+# Some physical units we'll need
+const μm = u"μm"  # micrometers
+const s  = u"s"   # seconds
+
+#### Load image
+fn = "/mnt/donghoon_036/20170830/exp1_20170830.imagine"
+img0 = load(fn, mode="r")
+
+#### 1. Sample stim stacks
+stimidx = sampleStimstacks(view(img0, :,:,30,:), 0.0000040, -3) #in Jerry_RegisterUtils; See `?sampleStimstacks`
+tindex0 = [20; stimidx; nimages(img0)-50] #this will be used for registration
+
+#### 2. Temporal median filtering (Run only one time)
+tmedian_filter(Float32, "exp1_med.cam", img0, collect(-3:3), tindex0) #in Jerry_RegisterUtils; See `?tmedian_filter`
+ImagineFormat.save_header("exp1_med.imagine", fn, view(img0, :,:,:,tindex0), Float32) #Create header file.
+
+#### 3. High intensity thresholding (Run only one time)
+img0 = load("exp1_med.imagine")
+highThresh(Float32, "exp1_thresh.cam", img0, 140; bias = NaN) #in Jerry_RegisterUtils; See `?highThresh`
+ImagineFormat.save_header("exp1_thresh.imagine", fn, img0, Float32)
+
+#### Load image for test registration; This preprocessed image will be used for getting deformation vectors. However, the original image will use deformation vectors and be warped.
+img0 = load("exp1_thresh.imagine")
+
+#### 4. Select test registration stacks
+tind = [1:10:21; 23; 31:10:length(tindex0)]
+tindex1 = tindex0[tind] 
+img = view(img0, :,:,:,tind)
+roi = (:, :, :, tindex1)
+
+#### Once parameters have been decided, load image for actual registration
+#img = img0
+#roi = (:, :, :, tindex0)
+
+#### Fixed image
+fixedidx = (nimages(img)+1) ÷ 2
+fixedidx = 23
+fixed0 = view(img, timeaxis(img)(fixedidx))
+  ps = pixelspacing(img)
+  σ = 20μm
+  sigmahp = Float64[σ/x for x in ps]
+  sigmalp = [3,3,0]  # lowpass filtering is not currently recommended
+  bias = 100 #bias = reinterpret(eltype(img0), UInt16(100))
+  pp = PreprocessSNF(bias, sigmalp, sigmahp)
+  fixed = pp(fixed0)
+
+#### Set parameters and create the worker algorithm structures. 
+gridsize = (24,24,13)
+knots = map(d->linspace(1,size(fixed,d),gridsize[d]), (1:ndims(fixed)...))
+mxshift = (30,30,3)
+λ = 1e-4
+algorithm = Apertures[Apertures(fixed, knots, mxshift, λ, pp; pid=wpids[i], correctbias=false) for i = 1:length(wpids)]
+mon = monitor(algorithm, (), Dict{Symbol,Any}(:u=>ArrayDecl(Array{SVector{3,Float64},3}, gridsize)))
+bname = splitext(splitdir(fn)[2])[1]
+@show bname
+fileout = string(bname, ".register")
+
+#### Run reg
+@time driver(fileout, algorithm, img, mon)
+jldopen(fileout, "r+") do io
+    write(io, "imagefile", fn)
+    write(io, "roi", roi)
+    write(io, "fixedidx", fixedidx)
+    write(io, "knots", knots)
+    write(io, "sigmalp", sigmalp)
+    write(io, "sigmahp", sigmahp)
+end
+
+#### Warp selected images: The original image will be warped instead of the preprocessed image.
+using Images, ImagineFormat, FileIO
+using BlockRegistration
+u = load(fileout, "u");
+roi = load(fileout, "roi");
+knots = load(fileout, "knots");
+img0 = load(fn, mode="r");
+img = view(img0, roi...);
+
+ϕs = medfilt(griddeformations(u, knots), 1)
+bname_warp = "exp1_20170830_register"
+open(string(bname_warp, ".cam"), "w") do file
+    warp!(Float32, file, img, ϕs; nworkers=3)
+end
+ImagineFormat.save_header(string(bname_warp, ".imagine"), fn, img, Float32)
+
+#### Warp all! : Do not run this unless all parameters are optimized.
+#ϕs_warpall = tinterpolate(ϕs, tindex0, nimages(img0));
+#bname_warpall = "exp1_20170830_warpall"
+#open(string(bname_warpall, ".cam"), "w") do file
+#    warp!(Float32, file, img0, ϕs_warpall; nworkers = 8)
+#end
+#ImagineFormat.save_header(string(bname_warpall, ".imagine"), fn, img0, Float32)
+```
