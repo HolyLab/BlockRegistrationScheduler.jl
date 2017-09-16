@@ -313,11 +313,11 @@ If image moves rapidly, the first two below might not be a good option.
 1. Choose good images for registration:
 I selected images that do not show evoked calcium activity. There are still spontaneous activity.
 
-2. Median or quantile filtering across time:
+2. Median or quantile filtering across time (temporal median/quantile filtering):
 This is to reduce noise and spontaneous activity.
 
 3. Replace too high intensity pixels with NaN:
-Sometimes, I observed high-intensity objects moving around tissue surface. While these things could be biologically important features, this is disastrous for registration. I ended up with replacing high intensity object (or pixels) with NaN. 
+Sometimes, I observed high-intensity objects moving around tissue surface. While these things could be biologically important features, this is disastrous for registration. I ended up with replacing high intensity object (or pixels) with NaN. e.g) `img[img .> thresh] = NaN`
 
 4. Run test registration:
 I first registered a few sample image stacks, adjusting parameters. There might be good starting parameter values. The below are the parameters that I frequently play around. With the size of my image and the degree of warping, I initially chose parameters below:
