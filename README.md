@@ -336,7 +336,7 @@ gridsize = (15, 15, 8) # or gridsize = (24,24,12) # Again, my image size is 1120
 algorithm = Apertures[Apertures(fixed, knots, mxshift, λ, pp; pid=wpids[i], correctbias=false) for i = 1:length(wpids)] #Notice that correctbias = false 
 
 #### In warping step, 
-ϕ_s = medfilt(griddeformations(u, knots), 1) #Basically there is no filtering. Notice the input parameter is 1.
+ϕ_s = griddeformations(u, knots) #I didn't apply median filtering. 
 ```
 
 The steps above aim to register only a few selected images. If that give a good result, interpolate the deformation vector `ϕ_s` using `tinterpolate`. Finally, apply the interpolated ϕ_s to warp entire dataset.
@@ -427,7 +427,7 @@ knots = load(fileout, "knots");
 img0 = load(fn, mode="r");
 img = view(img0, roi...);
 
-ϕs = medfilt(griddeformations(u, knots), 1)
+ϕs = griddeformations(u, knots)
 bname_warp = "exp1_20170830_register"
 open(string(bname_warp, ".cam"), "w") do file
     warp!(Float32, file, img, ϕs; nworkers=3)
