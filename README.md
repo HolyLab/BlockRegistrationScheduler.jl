@@ -369,7 +369,7 @@ ImagineFormat.save_header("exp1_med.imagine", fn, view(img0, :,:,:,tindex0), Flo
 #### 3. High intensity thresholding
 img0 = load("exp1_med.imagine") #Load the filtered image
 img1 = mappedarray(val -> val > 140 ? NaN : val, img0); # Replace high intensity pixels with NaN. 140 is a threshold. NaN is a value for replacement.
-img1 = AxisArray(img1, (:x, :l, :z, :time), (0.5770μm, 0.5770μm, 5μm, 2s)); # Assign axes again. 
+img1 = AxisArray(img1, (:x, :l, :z, :time), (0.5770μm, 0.5770μm, 5μm, 2s)); # Assign axes. 
 # `img1` is a preprocessed image. It will be used for getting deformation vectors. However, the original image will use deformation vectors and be warped.
 
 #### 4. Select image stacks for test registration
