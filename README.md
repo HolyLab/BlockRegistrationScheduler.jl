@@ -366,28 +366,26 @@ tindex0 = [20; stimidx; nimages(img0)-50] #this will be used for registration
 tmedian_filter(Float32, "exp1_med.cam", img0, collect(-3:3), tindex0) #in Jerry_RegisterUtils; See `?tmedian_filter`
 ImagineFormat.save_header("exp1_med.imagine", fn, view(img0, :,:,:,tindex0), Float32) #Create header file.
 
-#### 3. High intensity thresholding (Run only one time)
-img0 = load("exp1_med.imagine")
-highThresh(Float32, "exp1_thresh.cam", img0, 140; bias = NaN) #in Jerry_RegisterUtils; See `?highThresh`
-ImagineFormat.save_header("exp1_thresh.imagine", fn, img0, Float32)
+#### 3. High intensity thresholding
+img0 = load("exp1_med.imagine") #Load the filtered image
+img1 = mappedarray(val -> val > 140 ? NaN : val, img0); # Replace high intensity pixels with NaN. 140 is a threshold. NaN is a value for replacement.
+img1 = AxisArray(img1, (:x, :l, :z, :time), (0.5770μm, 0.5770μm, 5μm, 2s)); # Assign axes again. 
+# `img1` is a preprocessed image. It will be used for getting deformation vectors. However, the original image will use deformation vectors and be warped.
 
-#### Load image for registration; The image is preprocessed image. It will be used for getting deformation vectors. However, the original image will use deformation vectors and be warped.
-img0 = load("exp1_thresh.imagine")
-
-#### 4. Select test registration stacks
+#### 4. Select image stacks for test registration
 tind = [1:10:21; 23; 31:10:length(tindex0)]
 tindex1 = tindex0[tind] 
-img = view(img0, :,:,:,tind)
+img = view(img1, :,:,:,tind)
 roi = (:, :, :, tindex1)
 
-#### Once parameters have been decided, load image for actual registration
-#img = img0
+#### Once parameters have been decided, load an image for actual registration
+#img = img1
 #roi = (:, :, :, tindex0)
 
 #### Fixed image
 fixedidx = (nimages(img)+1) ÷ 2
 fixedidx = 23
-fixed0 = view(img, timeaxis(img)(fixedidx))
+fixed0 = view(img, timeaxis(img0)(fixedidx))
   ps = pixelspacing(img)
   σ = 20μm
   sigmahp = Float64[σ/x for x in ps]
