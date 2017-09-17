@@ -375,12 +375,12 @@ img1 = AxisArray(img1, (:x, :l, :z, :time), (0.5770μm, 0.5770μm, 5μm, 2s)); #
 #### 4. Select image stacks for test registration
 tind = [1:10:21; 23; 31:10:length(tindex0)]
 tindex1 = tindex0[tind] 
-img = view(img1, :,:,:,tind)
 roi = (:, :, :, tindex1)
+img = view(img1, roi[1:3]..., tind)
 
 #### Once parameters have been decided, load an image for actual registration
+#roi = (:, :, :, tindex0) #This `roi` will be used for warping the original image. 
 #img = img1
-#roi = (:, :, :, tindex0)
 
 #### Fixed image
 fixedidx = (nimages(img)+1) ÷ 2
