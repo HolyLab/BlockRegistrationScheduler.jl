@@ -398,7 +398,7 @@ fixed0 = view(img, timeaxis(img0)(fixedidx))
 gridsize = (24,24,13)
 knots = map(d->linspace(1,size(fixed,d),gridsize[d]), (1:ndims(fixed)...))
 mxshift = (30,30,3)
-λ = 1e-4
+λ = 1e-4 #or larger λ seems okay(e.g. λ = 1e-3).
 algorithm = Apertures[Apertures(fixed, knots, mxshift, λ, pp; pid=wpids[i], correctbias=false) for i = 1:length(wpids)]
 mon = monitor(algorithm, (), Dict{Symbol,Any}(:u=>ArrayDecl(Array{SVector{3,Float64},3}, gridsize)))
 bname = splitext(splitdir(fn)[2])[1]
