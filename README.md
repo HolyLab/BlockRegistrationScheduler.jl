@@ -358,18 +358,18 @@ const s  = u"s"   # seconds
 fn = "/mnt/donghoon_036/20170830/exp1_20170830.imagine"
 img0 = load(fn, mode="r")
 
-#### 1. Sample stim stacks
+#### 1. Choose good images for registration (Sample non-stimulated stacks)
 stimidx = sampleStimstacks(view(img0, :,:,30,:), 0.0000040, -3) #in Jerry_RegisterUtils; See `?sampleStimstacks`
-tindex0 = [20; stimidx; nimages(img0)-50] #this will be used for registration
+tindex0 = [20; stimidx; nimages(img0)-50] #these stacks will be used for registration. `tindex0` can be manually set up. e.g) tindex0 = [20, 50, 80];
 
-#### 2. Temporal median filtering (Run only one time)
+#### 2. Temporal median filtering (Run only one time unless `tindex0` is changed)
 tmedian_filter(Float32, "exp1_med.cam", img0, collect(-3:3), tindex0) #in Jerry_RegisterUtils; See `?tmedian_filter`
 ImagineFormat.save_header("exp1_med.imagine", fn, view(img0, :,:,:,tindex0), Float32) #Create header file.
+# See also `?StreamingContainer`. It might be possible to avoid storing the filtered image on the disk 
 
 #### 3. High intensity thresholding
-img0 = load("exp1_med.imagine") #Load the filtered image
-img1 = mappedarray(val -> val > 140 ? NaN : val, img0); # Replace high intensity pixels with NaN. 140 is a threshold. NaN is a value for replacement.
-img1 = AxisArray(img1, (:x, :l, :z, :time), (0.5770μm, 0.5770μm, 5μm, 2s)); # Assign axes. 
+img0 = load("exp1_med.imagine") #Load the filtered image 
+img1 = AxisArray(mappedarray(val -> val > 140 ? NaN : val, img0.data), axes(img0)) # Replace high intensity pixels with NaN. 140 is a threshold. NaN is a value for replacement. Also, copy(?) axes from `img0`
 # `img1` is a preprocessed image. It will be used for getting deformation vectors. However, the original image will use deformation vectors and be warped.
 
 #### 4. Select image stacks for test registration
@@ -383,8 +383,7 @@ img = view(img1, roi[1:3]..., tind)
 #img = img1
 
 #### Fixed image
-fixedidx = (nimages(img)+1) ÷ 2
-fixedidx = 23
+fixedidx = (nimages(img)+1) ÷ 2 #Or, manually select `fixedidx` e.g) fixedidx = 23
 fixed0 = view(img, timeaxis(img0)(fixedidx))
   ps = pixelspacing(img)
   σ = 20μm
@@ -399,7 +398,7 @@ gridsize = (24,24,13)
 knots = map(d->linspace(1,size(fixed,d),gridsize[d]), (1:ndims(fixed)...))
 mxshift = (30,30,3)
 λ = 1e-4 #or larger λ seems okay(e.g. λ = 1e-3).
-algorithm = Apertures[Apertures(fixed, knots, mxshift, λ, pp; pid=wpids[i], correctbias=false) for i = 1:length(wpids)]
+algorithm = Apertures[Apertures(fixed, knots, mxshift, λ, pp; pid=wpids[i], correctbias=false) for i = 1:length(wpids)] #correctbias = false works fine.
 mon = monitor(algorithm, (), Dict{Symbol,Any}(:u=>ArrayDecl(Array{SVector{3,Float64},3}, gridsize)))
 bname = splitext(splitdir(fn)[2])[1]
 @show bname
