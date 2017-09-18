@@ -309,12 +309,14 @@ The below are some properties of my image:
 - Warping is neither rapid nor drastic. For example, two images at time = 0 and at time = 3 min are fairly identical.
 - Without neuronal activity, signal-noise ratio was low (Camera bias is 100. Pixel intensity in tissue region is about 120~130.).
 
-If image moves rapidly, the first two below might not be a good option.
+If image moves rapidly, the first two below might not be a good option. 
 1. Choose good images for registration:
 I selected images that do not show evoked calcium activity. There are still spontaneous activity.
 
 2. Median or quantile filtering across time (temporal median/quantile filtering):
 This is to reduce noise and spontaneous activity.
+
+By the way, the first step and the second step can be swaped. I wanted to reduce computation time for temporal-median filtering.
 
 3. Replace too high intensity pixels with NaN:
 Sometimes, I observed high-intensity objects moving around tissue surface. While these things could be biologically important features, this is disastrous for registration. I ended up with replacing high intensity object (or pixels) with NaN. e.g) `img[img .> thresh] = NaN`
