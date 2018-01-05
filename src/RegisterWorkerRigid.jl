@@ -8,7 +8,7 @@ using RegisterWorkerShell
 
 import RegisterWorkerShell: worker
 
-export Rigid
+export Rigid, RigidGridStart
 
 type Rigid{A<:AbstractArray,T} <: AbstractWorker
     fixed::A
@@ -55,6 +55,57 @@ function worker(algorithm::Rigid, img, tindex, mon)
     end
     tfm, mismatch = optimize_rigid(algorithm.fixed, moving, tfm, [size(algorithm.fixed)...]/2, algorithm.SD, thresh=algorithm.thresh; print_level=get(algorithm.params, :print_level, 0))
 
+    # There are no Rigid parameters that are expected as outputs,
+    # so no need to call monitor!(mon, algorithm)
+    monitor!(mon, :tform, tfm)
+    monitor!(mon, :mismatch, mismatch)
+    if haskey(mon, :warped)
+        monitor!(mon, :warped, transform(moving, tfm))
+    end
+    mon
+end
+
+
+type RigidGridStart{A<:AbstractArray,T} <: AbstractWorker
+    fixed::A
+    thresh::T
+    maxradians::Vector{Float64}
+    rgridsz::Vector{Int}
+    mxshift::Vector{Int}
+    SD::Matrix{T}
+    params
+    workerpid::Int
+end
+
+"""
+`RigidGridStart(fixed, maxradians, rgridsz, mxshift; thresh_fac=(0.5)^ndims(fixed), thresh=nothing, SD = eye(ndims(fixed)), pid=1, kwargs...)`
+initializes the `RigidGridStart` registration algorithm.  This algorithm works much like `Rigid` except that instead of initializing with a 
+principle axis transformation it intializes with a grid search of rotations+shifts.  Possible shifts are specified by `mxshift` while rotations 
+are specified by `maxradians` and `rgridsz`.  See docs for `RegisterOptimize.rotation_gridsearch` for more details.
+"""
+function RigidGridStart(fixed, maxradians, rgridsz, mxshift; thresh_fac=(0.5)^ndims(fixed), thresh=0, SD = eye(ndims(fixed)), pid=1, kwargs...)
+    nimages(fixed) == 1 || error("Register to a single image")
+    SDm = convert(Matrix, SD)
+    T = eltype(SDm)
+    T = T <: AbstractFloat ? T : Float64
+    cthresh = thresh == nothing ? thresh_fac*sum(abs2, fixed) : thresh
+    params = Dict{Symbol,Any}(kwargs)
+    RigidGridStart{typeof(fixed),T}(fixed, convert(T, cthresh), [maxradians...], [rgridsz...], [mxshift...], SDm, params, pid)
+end
+
+function init!(algorithm::RigidGridStart)
+    eval(:(using RegisterMismatch))
+end
+
+function worker(algorithm::RigidGridStart, img, tindex, mon)
+    moving = getindex_t(img, tindex)
+    if any(x->x>1, algorithm.rgridsz)
+        tfm, best_mm = rotation_gridsearch(algorithm.fixed, moving, algorithm.mxshift, algorithm.maxradians, algorithm.rgridsz, algorithm.SD)
+    else
+        tfm = tformeye(ndims(moving))
+    end
+    print("Beginning iterative optimization with this transform, returned by grid search:\n $tfm")
+    tfm, mismatch = optimize_rigid(algorithm.fixed, moving, tfm, [size(algorithm.fixed)...]/2, algorithm.SD, thresh=algorithm.thresh; print_level=get(algorithm.params, :print_level, 0))
     # There are no Rigid parameters that are expected as outputs,
     # so no need to call monitor!(mon, algorithm)
     monitor!(mon, :tform, tfm)
