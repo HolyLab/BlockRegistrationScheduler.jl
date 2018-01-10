@@ -100,19 +100,29 @@ end
 function worker(algorithm::RigidGridStart, img, tindex, mon)
     moving = getindex_t(img, tindex)
     if any(x->x>1, algorithm.rgridsz)
-        tfm, best_mm = rotation_gridsearch(algorithm.fixed, moving, algorithm.mxshift, algorithm.maxradians, algorithm.rgridsz, algorithm.SD)
+        best_tfm, best_mm = rotation_gridsearch(algorithm.fixed, moving, algorithm.mxshift, algorithm.maxradians, algorithm.rgridsz, algorithm.SD)
     else
-        tfm = tformeye(ndims(moving))
+        best_tfm = tformeye(ndims(moving))
+        best_mm = mismatch0(algorithm.fixed, moving)
     end
-    print("Beginning iterative optimization with this transform, returned by grid search:\n $tfm")
+    print("Beginning iterative optimization with this transform, returned by grid search:\n $best_tfm")
     tfm, mismatch = optimize_rigid(algorithm.fixed,
                                    moving,
-                                   tfm,
+                                   best_tfm,
                                    [size(algorithm.fixed)...]/2,
                                    algorithm.SD,
                                    thresh=algorithm.thresh;
                                    print_level=get(algorithm.params, :print_level, 0),
                                    max_iter=get(algorithm.params, :max_iter, 3000))
+    ##########
+    #work around issue with rigid optimization (see github)
+    @show typeof(mon[:mismatch])
+    if mismatch > best_mm
+        warn("Iterative optimization found a worse answer than the initial transform.  This shouldn't happen!  Using the initial.")
+        mismatch = best_mm
+        tfm = best_tfm
+    end
+    ##########
     # There are no Rigid parameters that are expected as outputs,
     # so no need to call monitor!(mon, algorithm)
     monitor!(mon, :tform, tfm)
