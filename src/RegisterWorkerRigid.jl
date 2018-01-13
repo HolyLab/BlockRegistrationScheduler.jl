@@ -111,6 +111,7 @@ function worker(algorithm::RigidGridStart, img, tindex, mon)
                                    best_tfm,
                                    [size(algorithm.fixed)...]/2,
                                    algorithm.SD,
+                                   pi/90, #max rotation for Ipopt
                                    thresh=algorithm.thresh;
                                    print_level=get(algorithm.params, :print_level, 0),
                                    max_iter=get(algorithm.params, :max_iter, 3000))
