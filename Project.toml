@@ -11,4 +11,5 @@ RegisterWorkerAperturesMismatch = "30e56b64-2659-11e9-2fbf-0524297743d8"
 RegisterWorkerShell = "978d31ce-2656-11e9-22d6-b5c46a1a3d3e"
 
 [compat]
+Reexport = "1"
 julia = "1.1"
