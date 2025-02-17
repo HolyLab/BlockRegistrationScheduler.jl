@@ -1,6 +1,6 @@
 name = "BlockRegistrationScheduler"
 uuid = "5d60e731-3d07-5a0e-bd67-2fa232a8a749"
-version = "1.0.1"
+version = "1.0.2"
 
 [deps]
 BlockRegistration = "96be3cfc-dfc9-41f0-9424-fd41ed36fd5e"
@@ -11,5 +11,16 @@ RegisterWorkerAperturesMismatch = "30e56b64-2659-11e9-2fbf-0524297743d8"
 RegisterWorkerShell = "978d31ce-2656-11e9-22d6-b5c46a1a3d3e"
 
 [compat]
+BlockRegistration = "0.2"
 Reexport = "1"
-julia = "1.1"
+RegisterDriver = "0.2"
+RegisterWorkerApertures = "0.1, 0.2"
+RegisterWorkerAperturesMismatch = "0.1, 0.2"
+RegisterWorkerShell = "0.2"
+julia = "1.10"
+
+[extras]
+Test = "8dfed614-e22c-5e08-85e1-65c5234f0b40"
+
+[targets]
+test = ["Test"]
